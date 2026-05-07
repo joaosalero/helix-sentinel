@@ -1,0 +1,12 @@
+rules:
+  - id: helix-no-secret-logging
+    message: Avoid logging secret-like variables.
+    severity: WARNING
+    languages: [python]
+    pattern-either:
+      - pattern: logger.$METHOD(..., $SECRET, ...)
+      - pattern: logging.$METHOD(..., $SECRET, ...)
+    metavariable-regex:
+      metavariable: $SECRET
+      regex: (?i).*(secret|token|password|credential).*
+

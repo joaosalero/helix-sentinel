@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: helix_sentinel
+      POSTGRES_USER: helix
+      POSTGRES_PASSWORD: helix
+    ports:
+      - "5432:5432"
+    volumes:
+      - helix-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U helix -d helix_sentinel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - helix-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - helix-grafana:/var/lib/grafana
+
+volumes:
+  helix-postgres:
+  helix-redis:
+  helix-grafana:
+

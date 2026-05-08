@@ -17,7 +17,10 @@ from app.api.routes.threats import router as threats_router
 from app.audit.repositories import PostgresAuditRepository
 from app.core.config.settings import get_security_settings
 from app.core.exceptions.security import register_security_exception_handlers
-from app.detections.repositories import PostgresDetectionRuleRepository
+from app.detections.repositories import (
+    PostgresDetectionAlertRepository,
+    PostgresDetectionRuleRepository,
+)
 from app.enrichment.repositories import PostgresIOCRepository
 from app.events.repositories import PostgresEventRepository
 from app.users.repositories import PostgresUserRepository
@@ -85,6 +88,9 @@ def configure_feature_state(app: FastAPI, settings: Settings) -> None:
     event_repository = PostgresEventRepository(app.state.db_session_factory)
     app.state.event_repository = event_repository
     app.state.detection_rule_repository = PostgresDetectionRuleRepository(
+        app.state.db_session_factory
+    )
+    app.state.detection_alert_repository = PostgresDetectionAlertRepository(
         app.state.db_session_factory
     )
     app.state.ioc_repository = PostgresIOCRepository(app.state.db_session_factory)

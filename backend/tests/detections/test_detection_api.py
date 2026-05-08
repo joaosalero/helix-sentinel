@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -12,7 +13,13 @@ from app.api.app import create_security_app
 from app.auth.rbac import permissions_for_roles
 from app.core.config.settings import SecuritySettings
 from app.core.security.passwords import hash_password
-from app.detections.repositories import InMemoryDetectionRuleRepository
+from app.detections.repositories import (
+    InMemoryDetectionAlertRepository,
+    InMemoryDetectionRuleRepository,
+)
+from app.events.repositories import InMemoryEventRepository
+from app.events.schemas import NormalizedEvent
+from app.events.taxonomy import EventCategory, EventSeverity
 from app.users.models import UserStatus
 from app.users.repositories import InMemoryUserRepository
 from app.users.schemas import StoredUser
@@ -56,6 +63,20 @@ detection:
   condition: selection
 """
 
+EXECUTION_RULE = """
+title: Suspicious PowerShell Title Match
+tags:
+  - attack.execution
+logsource:
+  product: windows
+  category: process_creation
+level: high
+detection:
+  selection:
+    title|contains: powershell
+  condition: selection
+"""
+
 
 @dataclass
 class DetectionApiContext:
@@ -65,6 +86,7 @@ class DetectionApiContext:
     engineer_token: str
     viewer_token: str
     repository: InMemoryDetectionRuleRepository
+    alert_repository: InMemoryDetectionAlertRepository
 
 
 @pytest.fixture
@@ -73,6 +95,7 @@ async def detection_context() -> AsyncIterator[DetectionApiContext]:
     viewer_roles = frozenset({"viewer"})
     engineer = StoredUser(
         id=uuid4(),
+        tenant_id="tenant-a",
         email="engineer@example.com",
         display_name="Detection Engineer",
         password_hash=hash_password("valid engineer password"),
@@ -82,6 +105,7 @@ async def detection_context() -> AsyncIterator[DetectionApiContext]:
     )
     viewer = StoredUser(
         id=uuid4(),
+        tenant_id="tenant-a",
         email="viewer@example.com",
         display_name="Viewer",
         password_hash=hash_password("valid viewer password"),
@@ -90,9 +114,28 @@ async def detection_context() -> AsyncIterator[DetectionApiContext]:
         permissions=permissions_for_roles(viewer_roles),
     )
     repository = InMemoryDetectionRuleRepository()
+    alert_repository = InMemoryDetectionAlertRepository()
+    event_repository = InMemoryEventRepository()
+    event_repository.normalized_events.append(
+        NormalizedEvent(
+            id=uuid4(),
+            raw_event_id=uuid4(),
+            tenant_id="tenant-a",
+            source_name="edr",
+            source_product="windows",
+            source_vendor=None,
+            category=EventCategory.ENDPOINT,
+            severity=EventSeverity.HIGH,
+            event_time=datetime(2026, 5, 8, 12, tzinfo=UTC),
+            ingested_at=datetime(2026, 5, 8, 12, tzinfo=UTC),
+            title="powershell encoded suspicious process",
+        )
+    )
     app = create_security_app()
     app.state.user_repository = InMemoryUserRepository([engineer, viewer])
     app.state.detection_rule_repository = repository
+    app.state.detection_alert_repository = alert_repository
+    app.state.event_repository = event_repository
     app.state.security_settings = SecuritySettings(
         environment="test",
         auth_secret_key="test-access-secret-with-at-least-32-bytes",
@@ -113,6 +156,7 @@ async def detection_context() -> AsyncIterator[DetectionApiContext]:
             engineer_token=engineer_login.json()["access_token"],
             viewer_token=viewer_login.json()["access_token"],
             repository=repository,
+            alert_repository=alert_repository,
         )
 
 
@@ -232,3 +276,48 @@ async def test_rule_listing_requires_authentication(
     response = await detection_context.client.get("/api/v1/detections/rules")
 
     assert response.status_code == 401
+
+
+async def test_active_rule_execution_matches_bounded_events(
+    detection_context: DetectionApiContext,
+) -> None:
+    body = await _import_rule(detection_context, EXECUTION_RULE, status="active")
+
+    response = await detection_context.client.post(
+        f"/api/v1/detections/rules/{body['id']}/execute",
+        headers={"Authorization": f"Bearer {detection_context.engineer_token}"},
+        json={
+            "start_time": "2026-05-08T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "tenant_id": "tenant-a",
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["evaluated_events"] == 1
+    assert result["matched_events"] == 1
+    assert result["matches"][0]["matched_selections"] == ["selection"]
+    assert len(detection_context.alert_repository.alerts) == 1
+    alert = detection_context.alert_repository.alerts[0]
+    assert alert.tenant_id == "tenant-a"
+    assert alert.rule_id == UUID(str(body["id"]))
+    assert alert.status == "open"
+
+
+async def test_cross_tenant_rule_execution_is_rejected(
+    detection_context: DetectionApiContext,
+) -> None:
+    body = await _import_rule(detection_context, EXECUTION_RULE, status="active")
+
+    response = await detection_context.client.post(
+        f"/api/v1/detections/rules/{body['id']}/execute",
+        headers={"Authorization": f"Bearer {detection_context.engineer_token}"},
+        json={
+            "start_time": "2026-05-08T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "tenant_id": "tenant-b",
+        },
+    )
+
+    assert response.status_code == 403

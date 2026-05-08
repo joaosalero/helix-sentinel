@@ -2,7 +2,11 @@
 
 from app.ai.models import AIAnomalyRecord, AIEnrichmentRecord
 from app.audit.models import AuditEvent as AuthAuditEvent
-from app.detections.models import DetectionAttackMappingRecord, DetectionRuleRecord
+from app.detections.models import (
+    DetectionAlertRecord,
+    DetectionAttackMappingRecord,
+    DetectionRuleRecord,
+)
 from app.enrichment.models import EventIOCMatchRecord, IOCIndicatorRecord
 from app.events.models import EventSource, NormalizedSecurityEvent, RawSecurityEvent
 from app.threats.models import ThreatInsightRecord, ThreatIOCReferenceRecord
@@ -40,6 +44,7 @@ __all__ = [
     "AuditEvent",
     "Base",
     "DetectionAttackMappingRecord",
+    "DetectionAlertRecord",
     "DetectionRule",
     "DetectionRuleRecord",
     "DetectionTestCase",

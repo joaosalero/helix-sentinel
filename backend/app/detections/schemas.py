@@ -1,8 +1,9 @@
 """Schemas for Detection Engineering APIs and services."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -102,6 +103,81 @@ class DetectionRuleListResponse(BaseModel):
     offset: int
 
 
+class DetectionExecutionRequest(BaseModel):
+    """Bounded execution request for evaluating one active rule over events."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_time: datetime = Field(default_factory=lambda: datetime.now(UTC) - timedelta(days=1))
+    end_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    tenant_id: str | None = Field(default=None, min_length=1, max_length=80)
+    source: str | None = Field(default=None, min_length=1, max_length=120)
+    limit: int = Field(default=500, ge=1, le=2_000)
+
+    @model_validator(mode="after")
+    def validate_execution_window(self) -> "DetectionExecutionRequest":
+        """Keep synchronous rule execution bounded for API use."""
+        if self.end_time <= self.start_time:
+            msg = "end_time must be after start_time"
+            raise ValueError(msg)
+        if self.end_time - self.start_time > timedelta(days=30):
+            msg = "execution window must not exceed 30 days"
+            raise ValueError(msg)
+        return self
+
+
+class DetectionExecutionMatch(BaseModel):
+    """Matched normalized event summary for a detection execution."""
+
+    event_id: UUID
+    tenant_id: str
+    source_name: str
+    event_time: datetime
+    severity: str
+    category: str
+    title: str
+    matched_selections: list[str]
+
+
+class DetectionAlertStatus(StrEnum):
+    """Operational lifecycle state for persisted detection alerts."""
+
+    OPEN = "open"
+    ACKNOWLEDGED = "acknowledged"
+    CLOSED = "closed"
+
+
+class DetectionAlert(BaseModel):
+    """Durable alert state created from a detection execution match."""
+
+    id: UUID = Field(default_factory=uuid4)
+    tenant_id: str = Field(min_length=1, max_length=80)
+    rule_id: UUID
+    event_id: UUID
+    status: DetectionAlertStatus = DetectionAlertStatus.OPEN
+    severity: DetectionSeverity
+    category: DetectionCategory
+    title: str = Field(max_length=240)
+    source_name: str = Field(max_length=120)
+    event_time: datetime
+    matched_selections: list[str] = Field(default_factory=list)
+    correlation_id: str | None = Field(default=None, max_length=80)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class DetectionExecutionResponse(BaseModel):
+    """Synchronous detection execution summary."""
+
+    rule_id: UUID
+    rule_title: str
+    rule_status: DetectionStatus
+    evaluated_events: int
+    matched_events: int
+    matches: list[DetectionExecutionMatch]
+    executed_at: datetime
+
+
 class SigmaParseResult(BaseModel):
     """Internal Sigma parse output before persistence."""
 
@@ -124,4 +200,3 @@ class SigmaParseResult(BaseModel):
             msg = "Sigma rule detection section must not be empty"
             raise ValueError(msg)
         return self
-

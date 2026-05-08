@@ -20,3 +20,14 @@ detection_rule_api_requests_total = Counter(
     ("endpoint",),
 )
 
+detection_rule_executions_total = Counter(
+    "helix_detection_rule_executions_total",
+    "Total bounded detection rule executions.",
+    ("rule_status", "matched"),
+)
+
+detection_alerts_created_total = Counter(
+    "helix_detection_alerts_created_total",
+    "Total persisted detection alerts created from rule execution.",
+    ("severity", "status"),
+)

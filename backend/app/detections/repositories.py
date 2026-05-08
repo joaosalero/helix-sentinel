@@ -4,12 +4,18 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from sqlalchemy import Select, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
-from app.detections.models import DetectionAttackMappingRecord, DetectionRuleRecord
+from app.detections.models import (
+    DetectionAlertRecord,
+    DetectionAttackMappingRecord,
+    DetectionRuleRecord,
+)
 from app.detections.schemas import (
     AttackTechnique,
+    DetectionAlert,
     DetectionRule,
     DetectionRuleListFilters,
     DetectionRuleMetadata,
@@ -89,6 +95,54 @@ class PostgresDetectionRuleRepository(DetectionRuleRepository):
             total = len(records)
             window = records[filters.offset : filters.offset + filters.limit]
             return [_to_rule_schema(record) for record in window], total
+
+
+class DetectionAlertRepository:
+    """Persistence boundary for detection alert lifecycle records."""
+
+    async def create_many(self, alerts: list[DetectionAlert]) -> int:
+        """Persist new alerts and return the number of created records."""
+        raise NotImplementedError
+
+
+@dataclass
+class InMemoryDetectionAlertRepository(DetectionAlertRepository):
+    """Local/test repository for detection alert lifecycle state."""
+
+    alerts: list[DetectionAlert] = field(default_factory=list)
+
+    async def create_many(self, alerts: list[DetectionAlert]) -> int:
+        existing = {(alert.rule_id, alert.event_id) for alert in self.alerts}
+        created: list[DetectionAlert] = []
+        for alert in alerts:
+            key = (alert.rule_id, alert.event_id)
+            if key in existing:
+                continue
+            created.append(alert)
+            existing.add(key)
+        self.alerts.extend(created)
+        return len(created)
+
+
+class PostgresDetectionAlertRepository(DetectionAlertRepository):
+    """PostgreSQL-backed detection alert lifecycle repository."""
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self.session_factory = session_factory
+
+    async def create_many(self, alerts: list[DetectionAlert]) -> int:
+        if not alerts:
+            return 0
+        values = [_to_alert_record_values(alert) for alert in alerts]
+        statement = (
+            insert(DetectionAlertRecord)
+            .values(values)
+            .on_conflict_do_nothing(constraint="uq_detection_alerts_rule_event")
+            .returning(DetectionAlertRecord.id)
+        )
+        async with self.session_factory() as session, session.begin():
+            result = await session.execute(statement)
+            return len(result.scalars().all())
 
 
 def _filtered_statement(filters: DetectionRuleListFilters) -> Select[tuple[DetectionRuleRecord]]:
@@ -184,3 +238,22 @@ def _to_rule_schema(record: DetectionRuleRecord) -> DetectionRule:
             "updated_at": record.updated_at,
         }
     )
+
+
+def _to_alert_record_values(alert: DetectionAlert) -> dict[str, object]:
+    return {
+        "id": alert.id,
+        "tenant_id": alert.tenant_id,
+        "rule_id": alert.rule_id,
+        "event_id": alert.event_id,
+        "status": alert.status.value,
+        "severity": alert.severity.value,
+        "category": alert.category.value,
+        "title": alert.title,
+        "source_name": alert.source_name,
+        "event_time": alert.event_time,
+        "matched_selections": alert.matched_selections,
+        "correlation_id": alert.correlation_id,
+        "created_at": alert.created_at,
+        "updated_at": alert.updated_at,
+    }

@@ -79,3 +79,39 @@ class DetectionAttackMappingRecord(Base):
         "app.detections.models.DetectionRuleRecord",
         back_populates="attack_mappings",
     )
+
+
+class DetectionAlertRecord(Base):
+    """Persisted alert produced by bounded detection rule execution."""
+
+    __tablename__ = "detection_alerts"
+    __table_args__ = (
+        UniqueConstraint("rule_id", "event_id", name="uq_detection_alerts_rule_event"),
+        Index("ix_detection_alerts_tenant_status_created", "tenant_id", "status", "created_at"),
+        Index("ix_detection_alerts_rule_created", "rule_id", "created_at"),
+        Index("ix_detection_alerts_event", "event_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    rule_id: Mapped[UUID] = mapped_column(ForeignKey("detection_rules_v2.id"), nullable=False)
+    event_id: Mapped[UUID] = mapped_column(
+        ForeignKey("normalized_security_events.id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    severity: Mapped[str] = mapped_column(String(40), nullable=False)
+    category: Mapped[str] = mapped_column(String(80), nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    source_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    matched_selections: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    correlation_id: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )

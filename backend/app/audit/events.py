@@ -20,6 +20,7 @@ class AuditAction(StrEnum):
     EVENT_VALIDATION_FAILED = "events.validation_failed"
     DETECTION_RULE_IMPORTED = "detections.rule_imported"
     DETECTION_RULE_PARSE_FAILED = "detections.rule_parse_failed"
+    DETECTION_RULE_EXECUTED = "detections.rule_executed"
     IOC_CREATED = "enrichment.ioc_created"
     IOC_ENRICHMENT_EXECUTED = "enrichment.executed"
 

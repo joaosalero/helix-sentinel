@@ -10,6 +10,20 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.events.models import NormalizedSecurityEvent, RawSecurityEvent
 from app.events.schemas import EventIngestRequest, NormalizedEvent
+from app.events.taxonomy import EventCategory, EventSeverity
+
+
+@dataclass(frozen=True)
+class NormalizedEventQuery:
+    """Bounded query parameters for normalized event readers."""
+
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    tenant_id: str | None = None
+    source: str | None = None
+    category: EventCategory | None = None
+    severity: EventSeverity | None = None
+    limit: int | None = None
 
 
 @dataclass(frozen=True)
@@ -42,7 +56,10 @@ class EventRepository:
         """Persist a normalized event."""
         raise NotImplementedError
 
-    async def list_normalized_events(self) -> list[NormalizedEvent]:
+    async def list_normalized_events(
+        self,
+        query: NormalizedEventQuery | None = None,
+    ) -> list[NormalizedEvent]:
         """Return normalized events for analytics and enrichment readers."""
         raise NotImplementedError
 
@@ -67,8 +84,25 @@ class InMemoryEventRepository(EventRepository):
     async def store_normalized(self, event: NormalizedEvent) -> None:
         self.normalized_events.append(event)
 
-    async def list_normalized_events(self) -> list[NormalizedEvent]:
-        return list(self.normalized_events)
+    async def list_normalized_events(
+        self,
+        query: NormalizedEventQuery | None = None,
+    ) -> list[NormalizedEvent]:
+        events = list(self.normalized_events)
+        if query is None:
+            return events
+        filtered = [
+            event
+            for event in events
+            if (query.start_time is None or event.event_time >= query.start_time)
+            and (query.end_time is None or event.event_time <= query.end_time)
+            and (query.tenant_id is None or event.tenant_id == query.tenant_id)
+            and (query.source is None or event.source_name == query.source)
+            and (query.category is None or event.category == query.category)
+            and (query.severity is None or event.severity == query.severity)
+        ]
+        filtered.sort(key=lambda event: event.event_time)
+        return filtered[: query.limit] if query.limit is not None else filtered
 
 
 class PostgresEventRepository(EventRepository):
@@ -92,10 +126,16 @@ class PostgresEventRepository(EventRepository):
         async with self.session_factory() as session, session.begin():
             session.add(_to_normalized_model(event))
 
-    async def list_normalized_events(self) -> list[NormalizedEvent]:
+    async def list_normalized_events(
+        self,
+        query: NormalizedEventQuery | None = None,
+    ) -> list[NormalizedEvent]:
         async with self.session_factory() as session:
+            statement = select(NormalizedSecurityEvent)
+            if query is not None:
+                statement = _apply_normalized_query(statement, query)
             records = await session.scalars(
-                select(NormalizedSecurityEvent).order_by(NormalizedSecurityEvent.event_time)
+                statement.order_by(NormalizedSecurityEvent.event_time)
             )
             return [_to_normalized_schema(record) for record in records.all()]
 
@@ -177,3 +217,24 @@ def _to_normalized_schema(record: NormalizedSecurityEvent) -> NormalizedEvent:
 
 def _json_object(value: dict[str, Any] | None) -> dict[str, Any]:
     return value or {}
+
+
+def _apply_normalized_query(
+    statement: Any,
+    query: NormalizedEventQuery,
+) -> Any:
+    if query.start_time is not None:
+        statement = statement.where(NormalizedSecurityEvent.event_time >= query.start_time)
+    if query.end_time is not None:
+        statement = statement.where(NormalizedSecurityEvent.event_time <= query.end_time)
+    if query.tenant_id is not None:
+        statement = statement.where(NormalizedSecurityEvent.tenant_id == query.tenant_id)
+    if query.source is not None:
+        statement = statement.where(NormalizedSecurityEvent.source_name == query.source)
+    if query.category is not None:
+        statement = statement.where(NormalizedSecurityEvent.category == query.category.value)
+    if query.severity is not None:
+        statement = statement.where(NormalizedSecurityEvent.severity == query.severity.value)
+    if query.limit is not None:
+        statement = statement.limit(query.limit)
+    return statement

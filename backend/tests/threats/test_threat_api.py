@@ -52,6 +52,7 @@ async def threat_context() -> AsyncIterator[ThreatApiContext]:
     viewer_roles = frozenset({"viewer"})
     analyst = StoredUser(
         id=uuid4(),
+        tenant_id="tenant-a",
         email="analyst@example.com",
         display_name="Analyst",
         password_hash=hash_password("valid analyst password"),
@@ -61,6 +62,7 @@ async def threat_context() -> AsyncIterator[ThreatApiContext]:
     )
     viewer = StoredUser(
         id=uuid4(),
+        tenant_id="tenant-a",
         email="viewer@example.com",
         display_name="Viewer",
         password_hash=hash_password("valid viewer password"),
@@ -161,3 +163,19 @@ async def test_invalid_threat_time_range_is_rejected(threat_context: ThreatApiCo
     )
 
     assert response.status_code == 422
+
+
+async def test_cross_tenant_threat_filter_is_rejected(
+    threat_context: ThreatApiContext,
+) -> None:
+    response = await threat_context.client.get(
+        "/api/v1/threats/insights",
+        params={
+            "start_time": "2026-05-08T09:00:00+00:00",
+            "end_time": "2026-05-08T12:00:00+00:00",
+            "tenant_id": "tenant-b",
+        },
+        headers={"Authorization": f"Bearer {threat_context.analyst_token}"},
+    )
+
+    assert response.status_code == 403

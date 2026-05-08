@@ -58,6 +58,7 @@ async def enrichment_context() -> AsyncIterator[EnrichmentApiContext]:
     viewer_roles = frozenset({"viewer"})
     engineer = StoredUser(
         id=uuid4(),
+        tenant_id="tenant-a",
         email="engineer@example.com",
         display_name="Engineer",
         password_hash=hash_password("valid engineer password"),
@@ -67,6 +68,7 @@ async def enrichment_context() -> AsyncIterator[EnrichmentApiContext]:
     )
     analyst = StoredUser(
         id=uuid4(),
+        tenant_id="tenant-a",
         email="analyst@example.com",
         display_name="Analyst",
         password_hash=hash_password("valid analyst password"),
@@ -76,6 +78,7 @@ async def enrichment_context() -> AsyncIterator[EnrichmentApiContext]:
     )
     viewer = StoredUser(
         id=uuid4(),
+        tenant_id="tenant-a",
         email="viewer@example.com",
         display_name="Viewer",
         password_hash=hash_password("valid viewer password"),
@@ -219,6 +222,18 @@ async def test_enrichment_execution_matches_stored_events(
     assert body["status"] == "matched"
     assert body["total_matches"] == 1
     assert body["matches"][0]["confidence_factors"]
+
+
+async def test_cross_tenant_enrichment_execution_is_rejected(
+    enrichment_context: EnrichmentApiContext,
+) -> None:
+    response = await enrichment_context.client.post(
+        "/api/v1/enrichment/execute",
+        headers={"Authorization": f"Bearer {enrichment_context.analyst_token}"},
+        json={"tenant_id": "tenant-b"},
+    )
+
+    assert response.status_code == 403
 
 
 async def test_enrichment_query_validation_is_enforced(

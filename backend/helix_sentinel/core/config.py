@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     allowed_origins: list[AnyUrl | str] = ["http://localhost:3000"]
     otel_enabled: bool = False
+    otel_service_name: str = "helix-sentinel-api"
+    otel_exporter_otlp_endpoint: str = "http://localhost:4317"
     prometheus_enabled: bool = True
 
     @field_validator("allowed_origins", mode="before")

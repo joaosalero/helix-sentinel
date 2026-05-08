@@ -167,6 +167,30 @@ async def ensure_permissions_for_request(
     raise AuthorizationError
 
 
+async def resolve_tenant_scope_for_request(
+    request: Request,
+    principal: Principal,
+    requested_tenant_id: str | None,
+) -> str | None:
+    """Return the tenant scope allowed for this principal and request."""
+    if principal.is_superuser:
+        return requested_tenant_id
+    if requested_tenant_id is None or requested_tenant_id == principal.tenant_id:
+        return principal.tenant_id
+    await AuditService(get_state_audit_repository(request)).record(
+        AuditAction.PERMISSION_DENIED,
+        "failure",
+        actor_id=principal.id,
+        actor_email=principal.email,
+        correlation_id=getattr(request.state, "correlation_id", None),
+        metadata={
+            "requested_tenant_id": requested_tenant_id,
+            "principal_tenant_id": principal.tenant_id,
+        },
+    )
+    raise AuthorizationError
+
+
 def require_roles(*required_roles: str) -> Callable[..., Awaitable[Principal]]:
     """Build a dependency that requires at least one role."""
 

@@ -12,6 +12,7 @@ dependencies = [
   "asyncpg>=0.29",
   "fastapi>=0.111",
   "opentelemetry-api>=1.25",
+  "opentelemetry-exporter-otlp>=1.25",
   "opentelemetry-sdk>=1.25",
   "opentelemetry-instrumentation-fastapi>=0.46b0",
   "passlib[argon2]>=1.7",
@@ -52,6 +53,10 @@ mypy_path = "backend"
 
 [[tool.mypy.overrides]]
 module = ["passlib.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["opentelemetry.exporter.otlp.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

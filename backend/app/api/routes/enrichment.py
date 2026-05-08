@@ -13,6 +13,7 @@ from app.auth.rbac import Permission
 from app.core.dependencies.security import (
     ensure_permissions_for_request,
     resolve_current_user_from_request,
+    resolve_tenant_scope_for_request,
 )
 from app.enrichment.metrics import ioc_api_requests_total
 from app.enrichment.repositories import IOCRepository
@@ -94,6 +95,8 @@ async def execute_enrichment(request: Request) -> EnrichmentExecutionResponse | 
         payload = EnrichmentExecutionRequest.model_validate(await request.json())
     except ValidationError as exc:
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
+    tenant_id = await resolve_tenant_scope_for_request(request, principal, payload.tenant_id)
+    payload = payload.model_copy(update={"tenant_id": tenant_id})
     service = await _service(request)
     return await service.enrich_events(
         payload,

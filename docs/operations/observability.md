@@ -8,11 +8,22 @@ Local observability runs through Docker Compose:
 - Grafana: `http://localhost:3001`
 - OpenTelemetry collector: OTLP gRPC `localhost:4317`, OTLP HTTP `localhost:4318`
 
-Grafana is provisioned with a Prometheus datasource and a Helix Sentinel API overview dashboard. Prometheus scrapes the host-run API at `host.docker.internal:8000`, so start the backend with Uvicorn before expecting API targets to be up.
+Grafana is provisioned with a Prometheus datasource and a Helix Sentinel operational overview dashboard. Prometheus scrapes:
 
-Health endpoints are split by purpose: `/api/v1/health` is process liveness, and `/api/v1/ready` checks PostgreSQL and Redis readiness.
+- the host-run API at `host.docker.internal:8000`
+- Prometheus itself
+- the OpenTelemetry collector self-metrics endpoint
+- Grafana metrics
 
-OpenTelemetry instrumentation is environment-gated through `HELIX_OTEL_ENABLED`. Exporters are intentionally not hard-coded so local development, staging, and production can use different collectors without application refactoring.
+Start the backend with Uvicorn before expecting the API target to be up:
+
+```bash
+uvicorn helix_sentinel.main:create_app --factory --app-dir backend --reload
+```
+
+Health endpoints are split by purpose: `/api/v1/health` is process liveness, and `/api/v1/ready` checks PostgreSQL and Redis readiness. Readiness responses include dependency status and latency in milliseconds, and Prometheus exposes the same checks through `helix_readiness_dependency_status` and `helix_readiness_dependency_duration_seconds`.
+
+OpenTelemetry instrumentation is environment-gated through `HELIX_OTEL_ENABLED`. When enabled locally, the API exports OTLP traces to `HELIX_OTEL_EXPORTER_OTLP_ENDPOINT`, which defaults to `http://localhost:4317`.
 
 Event ingestion adds Prometheus counters for accepted events by category and severity, and rejected events by validation reason. Ingestion audit events use the same correlation ID as the HTTP request.
 

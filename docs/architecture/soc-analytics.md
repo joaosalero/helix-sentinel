@@ -36,7 +36,7 @@ High-severity ratio, authentication failure ratio, and events per source are cal
 
 ## Query Strategy
 
-Database-backed analytics should use the existing normalized event indexes:
+Database-backed analytics uses SQL aggregation over normalized event records for totals, distributions, trends, authentication failure trends, and source metrics. Queries use the existing normalized event indexes:
 
 - tenant and event time
 - category and event time
@@ -48,4 +48,3 @@ JSONB fields remain available for targeted actor, asset, and enrichment filterin
 ## Observability
 
 Analytics endpoints emit request counters and query latency histograms. Service logs include correlation IDs, total event counts, and elapsed time without logging raw event data or sensitive payload fields.
-

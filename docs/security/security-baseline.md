@@ -16,4 +16,8 @@ Argon2 password verification, role and permission guards, token `jti` claims for
 future refresh-token rotation, and structured audit events for authentication and
 authorization decisions.
 
+Tenant-aware analytics routes scope non-superuser requests to the authenticated
+principal tenant. Explicit cross-tenant filters are rejected and audited unless
+the principal is a superuser.
+
 AI-assisted features must treat model inputs and outputs as untrusted. Prompt content, external enrichments, and model summaries require validation and safe logging controls before they influence detection logic or user-visible recommendations.

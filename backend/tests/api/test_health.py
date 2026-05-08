@@ -39,6 +39,7 @@ async def test_ready_endpoint_returns_ok_when_dependencies_respond() -> None:
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
     assert response.json()["dependencies"] == {"postgres": "ok", "redis": "ok"}
+    assert set(response.json()["dependency_latency_ms"]) == {"postgres", "redis"}
 
 
 async def test_ready_endpoint_returns_503_when_dependency_fails() -> None:
@@ -53,6 +54,7 @@ async def test_ready_endpoint_returns_503_when_dependency_fails() -> None:
     assert response.status_code == 503
     assert response.json()["status"] == "error"
     assert response.json()["dependencies"]["postgres"] == "error"
+    assert response.json()["dependency_latency_ms"]["postgres"] >= 0
 
 
 def _test_settings() -> Settings:

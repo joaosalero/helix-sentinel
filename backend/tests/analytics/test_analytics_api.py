@@ -3,16 +3,20 @@
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import uuid4
 
 import pytest
+from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 
+from app.analytics.repositories import PostgresAnalyticsRepository
 from app.api.app import create_security_app
+from app.api.routes.analytics import _analytics_repository
 from app.auth.rbac import permissions_for_roles
 from app.core.config.settings import SecuritySettings
 from app.core.security.passwords import hash_password
-from app.events.repositories import InMemoryEventRepository
+from app.events.repositories import InMemoryEventRepository, PostgresEventRepository
 from app.events.schemas import NormalizedEvent
 from app.events.taxonomy import EventCategory, EventSeverity
 from app.users.models import UserStatus
@@ -57,6 +61,7 @@ async def analytics_context() -> AsyncIterator[AnalyticsApiContext]:
     denied_roles = frozenset({"viewer"})
     analyst = StoredUser(
         id=uuid4(),
+        tenant_id="tenant-a",
         email="analyst@example.com",
         display_name="Analyst",
         password_hash=hash_password("valid analyst password"),
@@ -66,6 +71,7 @@ async def analytics_context() -> AsyncIterator[AnalyticsApiContext]:
     )
     denied = StoredUser(
         id=uuid4(),
+        tenant_id="tenant-a",
         email="viewer@example.com",
         display_name="Viewer",
         password_hash=hash_password("valid viewer password"),
@@ -203,3 +209,34 @@ async def test_invalid_time_range_is_rejected(analytics_context: AnalyticsApiCon
     )
 
     assert response.status_code == 422
+
+
+async def test_cross_tenant_analytics_filter_is_rejected(
+    analytics_context: AnalyticsApiContext,
+) -> None:
+    response = await analytics_context.client.get(
+        "/api/v1/analytics/overview",
+        params={
+            "start_time": "2026-05-06T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "tenant_id": "tenant-b",
+        },
+        headers={"Authorization": f"Bearer {analytics_context.analyst_token}"},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_postgres_event_repository_uses_postgres_analytics_repository() -> None:
+    app = create_security_app()
+    app.state.event_repository = PostgresEventRepository(app.state.db_session_factory)
+    request = _RequestStub(app)
+
+    repository = await _analytics_repository(cast(Request, request))
+
+    assert isinstance(repository, PostgresAnalyticsRepository)
+
+
+@dataclass
+class _RequestStub:
+    app: object

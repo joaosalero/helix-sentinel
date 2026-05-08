@@ -11,6 +11,7 @@ class Principal(BaseModel):
     """Authenticated user context trusted by route guards."""
 
     id: UUID
+    tenant_id: str = Field(default="default", min_length=1, max_length=80)
     email: str = Field(min_length=3, max_length=320)
     display_name: str
     status: UserStatus
@@ -23,6 +24,7 @@ class StoredUser(BaseModel):
     """Internal identity record including password hash."""
 
     id: UUID
+    tenant_id: str = Field(default="default", min_length=1, max_length=80)
     email: str = Field(min_length=3, max_length=320)
     display_name: str
     password_hash: str
@@ -35,6 +37,7 @@ class StoredUser(BaseModel):
         """Return a password-free authenticated principal."""
         return Principal(
             id=self.id,
+            tenant_id=self.tenant_id,
             email=self.email,
             display_name=self.display_name,
             status=self.status,

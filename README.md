@@ -72,6 +72,7 @@ Local observability endpoints after `make up`:
 - Grafana: `http://localhost:3001`
 - API metrics: `http://localhost:8000/metrics`
 - API readiness: `http://localhost:8000/api/v1/ready`
+- OpenTelemetry OTLP: `localhost:4317` for gRPC, `localhost:4318` for HTTP
 
 Required backend validation before completing changes:
 

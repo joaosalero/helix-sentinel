@@ -9,7 +9,11 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.analytics.metrics import analytics_requests_total
-from app.analytics.repositories import InMemoryAnalyticsRepository
+from app.analytics.repositories import (
+    AnalyticsRepository,
+    InMemoryAnalyticsRepository,
+    PostgresAnalyticsRepository,
+)
 from app.analytics.schemas import (
     AnalyticsFilter,
     CountSummary,
@@ -22,8 +26,9 @@ from app.auth.rbac import Permission
 from app.core.dependencies.security import (
     ensure_permissions_for_request,
     resolve_current_user_from_request,
+    resolve_tenant_scope_for_request,
 )
-from app.events.repositories import InMemoryEventRepository
+from app.events.repositories import InMemoryEventRepository, PostgresEventRepository
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -91,13 +96,17 @@ async def _prepare_analytics_request(
     except (ValidationError, ValueError) as exc:
         detail = exc.errors() if isinstance(exc, ValidationError) else str(exc)
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(detail)})
+    tenant_id = await resolve_tenant_scope_for_request(request, principal, filters.tenant_id)
+    filters = filters.model_copy(update={"tenant_id": tenant_id})
     return filters, SocAnalyticsService(await _analytics_repository(request))
 
 
-async def _analytics_repository(request: Request) -> InMemoryAnalyticsRepository:
+async def _analytics_repository(request: Request) -> AnalyticsRepository:
     event_repository = request.app.state.event_repository
     if isinstance(event_repository, InMemoryEventRepository):
         return InMemoryAnalyticsRepository(event_repository.normalized_events)
+    if isinstance(event_repository, PostgresEventRepository):
+        return PostgresAnalyticsRepository(event_repository.session_factory)
     events = await event_repository.list_normalized_events()
     return InMemoryAnalyticsRepository(events)
 

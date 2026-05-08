@@ -51,6 +51,7 @@ async def ai_context() -> AsyncIterator[AIApiContext]:
     viewer_roles = frozenset({"viewer"})
     analyst = StoredUser(
         id=uuid4(),
+        tenant_id="tenant-a",
         email="analyst@example.com",
         display_name="Analyst",
         password_hash=hash_password("valid analyst password"),
@@ -60,6 +61,7 @@ async def ai_context() -> AsyncIterator[AIApiContext]:
     )
     viewer = StoredUser(
         id=uuid4(),
+        tenant_id="tenant-a",
         email="viewer@example.com",
         display_name="Viewer",
         password_hash=hash_password("valid viewer password"),
@@ -158,3 +160,16 @@ async def test_invalid_ai_time_range_is_rejected(ai_context: AIApiContext) -> No
 
     assert response.status_code == 422
 
+
+async def test_cross_tenant_ai_filter_is_rejected(ai_context: AIApiContext) -> None:
+    response = await ai_context.client.get(
+        "/api/v1/ai/anomalies",
+        params={
+            "start_time": "2026-05-08T09:00:00+00:00",
+            "end_time": "2026-05-08T12:00:00+00:00",
+            "tenant_id": "tenant-b",
+        },
+        headers={"Authorization": f"Bearer {ai_context.analyst_token}"},
+    )
+
+    assert response.status_code == 403

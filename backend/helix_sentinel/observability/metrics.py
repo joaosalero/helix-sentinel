@@ -1,7 +1,7 @@
 """Prometheus-compatible metrics endpoint."""
 
 from fastapi import APIRouter, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
 metrics_router = APIRouter()
 
@@ -14,6 +14,16 @@ http_request_duration_seconds = Histogram(
     "helix_http_request_duration_seconds",
     "HTTP request duration in seconds.",
     ["method", "path"],
+)
+readiness_dependency_status = Gauge(
+    "helix_readiness_dependency_status",
+    "Dependency readiness status where 1 is ready and 0 is unavailable.",
+    ["dependency"],
+)
+readiness_dependency_duration_seconds = Histogram(
+    "helix_readiness_dependency_duration_seconds",
+    "Dependency readiness check duration in seconds.",
+    ["dependency"],
 )
 
 

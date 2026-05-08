@@ -21,6 +21,7 @@ from app.auth.rbac import Permission
 from app.core.dependencies.security import (
     ensure_permissions_for_request,
     resolve_current_user_from_request,
+    resolve_tenant_scope_for_request,
 )
 from app.events.repositories import InMemoryEventRepository
 
@@ -70,6 +71,8 @@ async def _prepare_request(
     except (ValidationError, ValueError) as exc:
         detail = exc.errors() if isinstance(exc, ValidationError) else str(exc)
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(detail)})
+    tenant_id = await resolve_tenant_scope_for_request(request, principal, filters.tenant_id)
+    filters = filters.model_copy(update={"tenant_id": tenant_id})
     return filters, AIAnalyticsService(await _repository(request))
 
 

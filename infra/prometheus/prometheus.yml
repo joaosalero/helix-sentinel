@@ -7,9 +7,27 @@ external_labels:
   environment: local
 
 scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["prometheus:9090"]
+        labels:
+          service: prometheus
+
   - job_name: helix-sentinel-api
     metrics_path: /metrics
     static_configs:
       - targets: ["host.docker.internal:8000"]
         labels:
           service: api
+
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8888"]
+        labels:
+          service: otel-collector
+
+  - job_name: grafana
+    static_configs:
+      - targets: ["grafana:3000"]
+        labels:
+          service: grafana

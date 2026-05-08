@@ -90,6 +90,7 @@ def _to_stored_user(
         status = UserStatus.DISABLED
     return StoredUser(
         id=user.id,
+        tenant_id="default",
         email=user.email,
         display_name=user.display_name,
         password_hash=user.password_hash,

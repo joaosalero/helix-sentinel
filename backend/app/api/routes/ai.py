@@ -70,14 +70,15 @@ async def _prepare_request(
     except (ValidationError, ValueError) as exc:
         detail = exc.errors() if isinstance(exc, ValidationError) else str(exc)
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(detail)})
-    return filters, AIAnalyticsService(_repository(request))
+    return filters, AIAnalyticsService(await _repository(request))
 
 
-def _repository(request: Request) -> InMemoryAIEventRepository:
+async def _repository(request: Request) -> InMemoryAIEventRepository:
     event_repository = request.app.state.event_repository
     if isinstance(event_repository, InMemoryEventRepository):
         return InMemoryAIEventRepository(event_repository.normalized_events)
-    return InMemoryAIEventRepository([])
+    events = await event_repository.list_normalized_events()
+    return InMemoryAIEventRepository(events)
 
 
 def _query_params(request: Request) -> dict[str, Any]:
@@ -88,4 +89,3 @@ def _query_params(request: Request) -> dict[str, Any]:
         else:
             values[key] = value
     return values
-

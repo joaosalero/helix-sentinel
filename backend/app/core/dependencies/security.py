@@ -7,7 +7,7 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.audit.events import AuditAction
-from app.audit.repositories import InMemoryAuditRepository
+from app.audit.repositories import AuditRepository, InMemoryAuditRepository
 from app.audit.service import AuditService
 from app.auth.service import AuthenticationService, claims_subject_as_uuid
 from app.core.config.settings import SecuritySettings, get_security_settings
@@ -108,7 +108,7 @@ def get_state_user_repository(request: Request) -> UserRepository:
     return getattr(request.app.state, "user_repository", _default_user_repository)
 
 
-def get_state_audit_repository(request: Request) -> InMemoryAuditRepository:
+def get_state_audit_repository(request: Request) -> AuditRepository:
     """Return the request app's audit repository or the local default."""
     return getattr(request.app.state, "audit_repository", _default_audit_repository)
 

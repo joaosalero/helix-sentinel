@@ -14,12 +14,12 @@ from app.api.routes.enrichment import router as enrichment_router
 from app.api.routes.events import router as events_router
 from app.api.routes.security_probe import router as security_probe_router
 from app.api.routes.threats import router as threats_router
-from app.audit.repositories import InMemoryAuditRepository
+from app.audit.repositories import PostgresAuditRepository
 from app.core.config.settings import get_security_settings
 from app.core.exceptions.security import register_security_exception_handlers
-from app.detections.repositories import InMemoryDetectionRuleRepository
+from app.detections.repositories import PostgresDetectionRuleRepository
 from app.enrichment.repositories import InMemoryIOCRepository
-from app.events.repositories import InMemoryEventRepository
+from app.events.repositories import PostgresEventRepository
 from app.users.repositories import PostgresUserRepository
 from helix_sentinel.api.router import api_router
 from helix_sentinel.core.config import Settings, get_settings
@@ -72,14 +72,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 def configure_feature_state(app: FastAPI, settings: Settings) -> None:
     """Install local adapters required by the implemented feature modules."""
-    event_repository = InMemoryEventRepository()
     app.state.db_session_factory = create_session_factory(str(settings.database_url))
     app.state.user_repository = PostgresUserRepository(app.state.db_session_factory)
-    app.state.audit_repository = InMemoryAuditRepository()
+    app.state.audit_repository = PostgresAuditRepository(app.state.db_session_factory)
+    event_repository = PostgresEventRepository(app.state.db_session_factory)
     app.state.event_repository = event_repository
-    app.state.detection_rule_repository = InMemoryDetectionRuleRepository()
+    app.state.detection_rule_repository = PostgresDetectionRuleRepository(
+        app.state.db_session_factory
+    )
     app.state.ioc_repository = InMemoryIOCRepository()
-    app.state.ai_event_repository = InMemoryAIEventRepository(event_repository.normalized_events)
+    app.state.ai_event_repository = InMemoryAIEventRepository([])
     app.state.security_settings = get_security_settings()
 
 

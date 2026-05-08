@@ -41,7 +41,8 @@ async def create_ioc(request: Request) -> IOCRecord | JSONResponse:
         payload = IOCCreateRequest.model_validate(await request.json())
     except ValidationError as exc:
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
-    return await _service(request).create_ioc(
+    service = await _service(request)
+    return await service.create_ioc(
         payload,
         actor_id=principal.id,
         actor_email=principal.email,
@@ -58,7 +59,8 @@ async def list_iocs(request: Request) -> IOCListResponse | JSONResponse:
         filters = IOCListFilters.model_validate(_query_params(request))
     except ValidationError as exc:
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
-    return await _service(request).list_iocs(filters)
+    service = await _service(request)
+    return await service.list_iocs(filters)
 
 
 @router.get("/iocs/{ioc_id}", response_model=IOCRecord)
@@ -66,7 +68,8 @@ async def get_ioc(request: Request, ioc_id: UUID) -> IOCRecord | JSONResponse:
     """Return IOC details without exposing raw event payloads."""
     await _require_analytics(request)
     ioc_api_requests_total.labels(endpoint="get_ioc").inc()
-    ioc = await _service(request).get_ioc(ioc_id)
+    service = await _service(request)
+    ioc = await service.get_ioc(ioc_id)
     if ioc is None:
         return JSONResponse(status_code=404, content={"detail": "IOC not found"})
     return ioc
@@ -77,7 +80,8 @@ async def enrichment_summary(request: Request) -> EnrichmentSummary:
     """Return dashboard-ready IOC enrichment inventory metrics."""
     await _require_analytics(request)
     ioc_api_requests_total.labels(endpoint="summary").inc()
-    return await _service(request).summary()
+    service = await _service(request)
+    return await service.summary()
 
 
 @router.post("/execute", response_model=EnrichmentExecutionResponse)
@@ -90,7 +94,8 @@ async def execute_enrichment(request: Request) -> EnrichmentExecutionResponse | 
         payload = EnrichmentExecutionRequest.model_validate(await request.json())
     except ValidationError as exc:
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
-    return await _service(request).enrich_events(
+    service = await _service(request)
+    return await service.enrich_events(
         payload,
         actor_id=principal.id,
         actor_email=principal.email,
@@ -103,12 +108,12 @@ async def _require_analytics(request: Request) -> None:
     await ensure_permissions_for_request(request, principal, {Permission.ANALYTICS_READ.value})
 
 
-def _service(request: Request) -> IOCEnrichmentService:
+async def _service(request: Request) -> IOCEnrichmentService:
     event_repository = request.app.state.event_repository
     events = (
         event_repository.normalized_events
         if isinstance(event_repository, InMemoryEventRepository)
-        else []
+        else await event_repository.list_normalized_events()
     )
     return IOCEnrichmentService(
         _repository(request),

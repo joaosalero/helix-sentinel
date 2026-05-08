@@ -14,7 +14,7 @@ Routes should authorize with explicit role or permission checks. Superuser acces
 
 ## Persistence
 
-The authoritative runtime uses a PostgreSQL-backed user repository for authentication lookups. In-memory user repositories remain available for isolated tests and explicit local overrides.
+The authoritative runtime uses PostgreSQL-backed repositories for authentication user lookups and audit event persistence. In-memory repositories remain available for isolated tests and explicit local overrides.
 
 ## Account Enumeration
 

@@ -55,14 +55,15 @@ async def _prepare_request(
     except (ValidationError, ValueError) as exc:
         detail = exc.errors() if isinstance(exc, ValidationError) else str(exc)
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(detail)})
-    return filters, ThreatAnalyticsService(_repository(request))
+    return filters, ThreatAnalyticsService(await _repository(request))
 
 
-def _repository(request: Request) -> InMemoryThreatEventRepository:
+async def _repository(request: Request) -> InMemoryThreatEventRepository:
     event_repository = request.app.state.event_repository
     if isinstance(event_repository, InMemoryEventRepository):
         return InMemoryThreatEventRepository(event_repository.normalized_events)
-    return InMemoryThreatEventRepository([])
+    events = await event_repository.list_normalized_events()
+    return InMemoryThreatEventRepository(events)
 
 
 def _query_params(request: Request) -> dict[str, Any]:
@@ -73,4 +74,3 @@ def _query_params(request: Request) -> dict[str, Any]:
         else:
             values[key] = value
     return values
-

@@ -2,8 +2,13 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.events.models import NormalizedSecurityEvent, RawSecurityEvent
 from app.events.schemas import EventIngestRequest, NormalizedEvent
 
 
@@ -37,6 +42,10 @@ class EventRepository:
         """Persist a normalized event."""
         raise NotImplementedError
 
+    async def list_normalized_events(self) -> list[NormalizedEvent]:
+        """Return normalized events for analytics and enrichment readers."""
+        raise NotImplementedError
+
 
 @dataclass
 class InMemoryEventRepository(EventRepository):
@@ -51,18 +60,120 @@ class InMemoryEventRepository(EventRepository):
         *,
         correlation_id: str,
     ) -> RawEventRecord:
-        record = RawEventRecord(
-            id=uuid4(),
-            tenant_id=request.tenant_id,
-            source_name=request.source.name,
-            external_id=request.external_id,
-            payload=dict(request.payload),
-            received_at=datetime.now(UTC),
-            correlation_id=correlation_id,
-        )
+        record = _raw_record_from_request(request, correlation_id=correlation_id)
         self.raw_events.append(record)
         return record
 
     async def store_normalized(self, event: NormalizedEvent) -> None:
         self.normalized_events.append(event)
 
+    async def list_normalized_events(self) -> list[NormalizedEvent]:
+        return list(self.normalized_events)
+
+
+class PostgresEventRepository(EventRepository):
+    """PostgreSQL-backed raw and normalized event repository."""
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self.session_factory = session_factory
+
+    async def store_raw(
+        self,
+        request: EventIngestRequest,
+        *,
+        correlation_id: str,
+    ) -> RawEventRecord:
+        record = _raw_record_from_request(request, correlation_id=correlation_id)
+        async with self.session_factory() as session, session.begin():
+            session.add(_to_raw_model(record))
+        return record
+
+    async def store_normalized(self, event: NormalizedEvent) -> None:
+        async with self.session_factory() as session, session.begin():
+            session.add(_to_normalized_model(event))
+
+    async def list_normalized_events(self) -> list[NormalizedEvent]:
+        async with self.session_factory() as session:
+            records = await session.scalars(
+                select(NormalizedSecurityEvent).order_by(NormalizedSecurityEvent.event_time)
+            )
+            return [_to_normalized_schema(record) for record in records.all()]
+
+
+def _raw_record_from_request(
+    request: EventIngestRequest,
+    *,
+    correlation_id: str,
+) -> RawEventRecord:
+    return RawEventRecord(
+        id=uuid4(),
+        tenant_id=request.tenant_id,
+        source_name=request.source.name,
+        external_id=request.external_id,
+        payload=dict(request.payload),
+        received_at=datetime.now(UTC),
+        correlation_id=correlation_id,
+    )
+
+
+def _to_raw_model(record: RawEventRecord) -> RawSecurityEvent:
+    return RawSecurityEvent(
+        id=record.id,
+        tenant_id=record.tenant_id,
+        source_name=record.source_name,
+        external_id=record.external_id,
+        payload=record.payload,
+        received_at=record.received_at,
+        correlation_id=record.correlation_id,
+        schema_version=record.schema_version,
+    )
+
+
+def _to_normalized_model(event: NormalizedEvent) -> NormalizedSecurityEvent:
+    return NormalizedSecurityEvent(
+        id=event.id,
+        raw_event_id=event.raw_event_id,
+        tenant_id=event.tenant_id,
+        source_name=event.source_name,
+        source_product=event.source_product,
+        source_vendor=event.source_vendor,
+        category=event.category.value,
+        severity=event.severity.value,
+        title=event.title,
+        actor=event.actor.model_dump(exclude_none=True),
+        asset=event.asset.model_dump(exclude_none=True),
+        network=event.network,
+        ioc=event.ioc,
+        enrichment=event.enrichment,
+        event_time=event.event_time,
+        ingested_at=event.ingested_at,
+        normalization_version=event.normalization_version,
+    )
+
+
+def _to_normalized_schema(record: NormalizedSecurityEvent) -> NormalizedEvent:
+    return NormalizedEvent.model_validate(
+        {
+            "id": record.id,
+            "raw_event_id": record.raw_event_id,
+            "tenant_id": record.tenant_id,
+            "source_name": record.source_name,
+            "source_product": record.source_product,
+            "source_vendor": record.source_vendor,
+            "category": record.category,
+            "severity": record.severity,
+            "event_time": record.event_time,
+            "ingested_at": record.ingested_at,
+            "title": record.title,
+            "actor": _json_object(record.actor),
+            "asset": _json_object(record.asset),
+            "network": _json_object(record.network),
+            "ioc": _json_object(record.ioc),
+            "enrichment": _json_object(record.enrichment),
+            "normalization_version": record.normalization_version,
+        }
+    )
+
+
+def _json_object(value: dict[str, Any] | None) -> dict[str, Any]:
+    return value or {}

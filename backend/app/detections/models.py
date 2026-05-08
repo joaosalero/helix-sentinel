@@ -54,7 +54,8 @@ class DetectionRuleRecord(Base):
     )
 
     attack_mappings: Mapped[list["DetectionAttackMappingRecord"]] = relationship(
-        back_populates="rule"
+        "app.detections.models.DetectionAttackMappingRecord",
+        back_populates="rule",
     )
 
 
@@ -74,5 +75,7 @@ class DetectionAttackMappingRecord(Base):
     technique_name: Mapped[str | None] = mapped_column(String(160))
     tactic: Mapped[str | None] = mapped_column(String(120))
 
-    rule: Mapped[DetectionRuleRecord] = relationship(back_populates="attack_mappings")
-
+    rule: Mapped[DetectionRuleRecord] = relationship(
+        "app.detections.models.DetectionRuleRecord",
+        back_populates="attack_mappings",
+    )

@@ -45,7 +45,7 @@ uvicorn helix_sentinel.main:create_app --factory --app-dir backend --reload
 
 `helix_sentinel.db.base.Base` is the authoritative SQLAlchemy metadata owner. Alembic targets `helix_sentinel.db.models.Base.metadata`, which registers the active feature persistence models used by `app.*`.
 
-Authentication user lookups use the PostgreSQL-backed repository in the authoritative runtime. In-memory user repositories are retained for isolated tests and explicit overrides.
+Authentication user lookups, audit event persistence, event ingestion persistence, and detection rule persistence use PostgreSQL-backed repositories in the authoritative runtime. In-memory repositories are retained for isolated tests and explicit overrides.
 
 Frontend dependencies are intentionally separate:
 

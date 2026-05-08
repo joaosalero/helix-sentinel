@@ -25,7 +25,8 @@ Payloads must be JSON objects. Empty payloads, unknown top-level request fields,
 
 PostgreSQL stores raw and normalized events in separate tables. Raw events use JSONB for source payload retention. Normalized events use indexed scalar columns for common filters and JSONB fields for actor, asset, enrichment, network, and IOC metadata. Indexes prioritize tenant/time, category/time, severity/time, source/time, and targeted JSONB lookups.
 
+The authoritative runtime uses a PostgreSQL-backed event repository for raw and normalized ingestion persistence. In-memory event repositories remain available for isolated tests and explicit local overrides.
+
 ## Observability
 
 Ingestion emits audit events for accepted and rejected events. Prometheus counters track accepted events by category and severity, and rejected events by reason. All ingestion responses carry the correlation ID from middleware.
-

@@ -27,6 +27,8 @@ ATT&CK mappings are extracted from tags such as `attack.execution` and `attack.t
 
 Rules carry status, false-positive notes, tuning metadata, quality metadata, and operational notes. Advanced quality scoring and false-positive analytics are intentionally deferred until alert and incident lifecycle data exists.
 
+The authoritative runtime uses a PostgreSQL-backed detection rule repository for rule metadata and ATT&CK mappings. In-memory detection repositories remain available for isolated tests and explicit local overrides.
+
 ## Security Boundary
 
 Upload handling accepts text content through JSON, not arbitrary files. The parser does not execute rule content, import Python objects, or deserialize unsafe YAML tags. APIs are protected by `detections:read` and `detections:write` permissions.
@@ -34,4 +36,3 @@ Upload handling accepts text content through JSON, not arbitrary files. The pars
 ## Observability
 
 Detection workflows emit counters for imports, parse failures, and API usage. Import and parse failure flows emit audit events with correlation IDs and sanitized metadata.
-

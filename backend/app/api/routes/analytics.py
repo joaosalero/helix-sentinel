@@ -91,14 +91,15 @@ async def _prepare_analytics_request(
     except (ValidationError, ValueError) as exc:
         detail = exc.errors() if isinstance(exc, ValidationError) else str(exc)
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(detail)})
-    return filters, SocAnalyticsService(_analytics_repository(request))
+    return filters, SocAnalyticsService(await _analytics_repository(request))
 
 
-def _analytics_repository(request: Request) -> InMemoryAnalyticsRepository:
+async def _analytics_repository(request: Request) -> InMemoryAnalyticsRepository:
     event_repository = request.app.state.event_repository
     if isinstance(event_repository, InMemoryEventRepository):
         return InMemoryAnalyticsRepository(event_repository.normalized_events)
-    return InMemoryAnalyticsRepository([])
+    events = await event_repository.list_normalized_events()
+    return InMemoryAnalyticsRepository(events)
 
 
 def _query_params(request: Request) -> dict[str, Any]:

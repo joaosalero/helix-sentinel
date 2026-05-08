@@ -12,6 +12,10 @@ Helix Sentinel uses a compact security model aligned with a modular monolith:
 
 Routes should authorize with explicit role or permission checks. Superuser access is supported for break-glass administration, but normal access should use role-derived permissions.
 
+## Persistence
+
+The authoritative runtime uses a PostgreSQL-backed user repository for authentication lookups. In-memory user repositories remain available for isolated tests and explicit local overrides.
+
 ## Account Enumeration
 
 Login failures return a generic authentication error for missing users, invalid passwords, and inactive accounts. Missing-user login attempts still perform dummy password verification to reduce timing differences.
@@ -27,4 +31,3 @@ Authentication and authorization flows emit structured audit events for:
 - Rejected user state.
 
 Audit metadata is sanitized and must not include credentials, tokens, authorization headers, password hashes, or sensitive raw security telemetry.
-

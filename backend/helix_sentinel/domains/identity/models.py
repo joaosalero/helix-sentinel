@@ -22,7 +22,10 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    role_assignments: Mapped[list["RoleAssignment"]] = relationship(back_populates="user")
+    role_assignments: Mapped[list["RoleAssignment"]] = relationship(
+        "helix_sentinel.domains.identity.models.RoleAssignment",
+        back_populates="user",
+    )
 
 
 class Role(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -33,7 +36,10 @@ class Role(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(String(500))
 
-    permissions: Mapped[list["Permission"]] = relationship(back_populates="role")
+    permissions: Mapped[list["Permission"]] = relationship(
+        "helix_sentinel.domains.identity.models.Permission",
+        back_populates="role",
+    )
 
 
 class Permission(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -46,7 +52,10 @@ class Permission(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     resource: Mapped[str] = mapped_column(String(120), nullable=False)
     action: Mapped[str] = mapped_column(String(80), nullable=False)
 
-    role: Mapped[Role] = relationship(back_populates="permissions")
+    role: Mapped[Role] = relationship(
+        "helix_sentinel.domains.identity.models.Role",
+        back_populates="permissions",
+    )
 
 
 class RoleAssignment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -61,5 +70,8 @@ class RoleAssignment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     user_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id"), nullable=False)
     role_id: Mapped[UUID] = mapped_column(ForeignKey("identity_roles.id"), nullable=False)
 
-    user: Mapped[User] = relationship(back_populates="role_assignments")
-    role: Mapped[Role] = relationship()
+    user: Mapped[User] = relationship(
+        "helix_sentinel.domains.identity.models.User",
+        back_populates="role_assignments",
+    )
+    role: Mapped[Role] = relationship("helix_sentinel.domains.identity.models.Role")

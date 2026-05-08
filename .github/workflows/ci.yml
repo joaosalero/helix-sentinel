@@ -18,11 +18,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,security]"
       - name: Lint
-        run: ruff check backend
+        run: ruff check .
       - name: Typecheck
         run: mypy backend
       - name: Test
         run: pytest
+      - name: Bandit
+        run: bandit -r backend -x backend/tests
 
   frontend:
     runs-on: ubuntu-latest
@@ -39,4 +41,3 @@ jobs:
       - name: Typecheck frontend
         working-directory: frontend
         run: npm run typecheck
-

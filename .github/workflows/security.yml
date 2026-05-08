@@ -18,7 +18,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[security]"
       - name: Bandit
-        run: bandit -c pyproject.toml -r backend/helix_sentinel
+        run: bandit -r backend -x backend/tests
       - name: pip-audit
         run: pip-audit
 
@@ -37,4 +37,3 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITLEAKS_CONFIG: infra/gitleaks/gitleaks.toml
-

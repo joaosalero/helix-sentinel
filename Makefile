@@ -7,7 +7,7 @@ test:
 	pytest
 
 lint:
-	ruff check backend
+	ruff check .
 
 format:
 	ruff format backend
@@ -16,7 +16,7 @@ typecheck:
 	mypy backend
 
 security:
-	bandit -c pyproject.toml -r backend/helix_sentinel
+	bandit -r backend -x backend/tests
 	pip-audit
 
 up:
@@ -27,4 +27,3 @@ down:
 
 migrate:
 	alembic -c backend/alembic.ini upgrade head
-

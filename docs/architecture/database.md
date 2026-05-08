@@ -1,5 +1,9 @@
 # Database Foundation
 
+`helix_sentinel.db.base.Base` is the authoritative SQLAlchemy declarative base.
+Alembic targets `helix_sentinel.db.models.Base.metadata`, which imports both
+platform scaffold models and the active `app.*` feature persistence models.
+
 The initial PostgreSQL model supports:
 
 - RBAC and user identity.

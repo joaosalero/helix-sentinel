@@ -41,6 +41,12 @@ alembic -c backend/alembic.ini upgrade head
 uvicorn helix_sentinel.main:create_app --factory --app-dir backend --reload
 ```
 
+`helix_sentinel.main:create_app` is the authoritative backend runtime. It mounts health, metrics, authentication, event ingestion, Detection Engineering, SOC analytics, Threat Analytics, AI-assisted analytics, and IOC enrichment APIs under `HELIX_API_PREFIX` while exposing Prometheus metrics at `/metrics`.
+
+`helix_sentinel.db.base.Base` is the authoritative SQLAlchemy metadata owner. Alembic targets `helix_sentinel.db.models.Base.metadata`, which registers the active feature persistence models used by `app.*`.
+
+Authentication user lookups use the PostgreSQL-backed repository in the authoritative runtime. In-memory user repositories are retained for isolated tests and explicit overrides.
+
 Frontend dependencies are intentionally separate:
 
 ```bash
@@ -60,6 +66,15 @@ make up
 make down
 ```
 
+Required backend validation before completing changes:
+
+```bash
+pytest
+ruff check .
+mypy backend
+bandit -r backend -x backend/tests
+```
+
 ## Security Baseline
 
 Helix Sentinel starts with defense-in-depth defaults: strict configuration validation, safe logging expectations, SQLAlchemy query construction, JWT-ready auth boundaries, RBAC-ready models, audit events, dependency scanning, secret scanning, and security middleware placeholders. Offensive tooling and exploit functionality are intentionally out of scope.
@@ -67,4 +82,3 @@ Helix Sentinel starts with defense-in-depth defaults: strict configuration valid
 ## Testing Rule
 
 Every future module, endpoint, service, analytics pipeline, worker, or domain behavior must include corresponding tests in the same change. Feature additions without test updates are not accepted.
-

@@ -6,11 +6,9 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-
-class Base(DeclarativeBase):
-    """Declarative base for identity and audit migrations."""
+from helix_sentinel.db.base import Base as Base
 
 
 class UserStatus(StrEnum):
@@ -46,7 +44,10 @@ class User(Base):
         nullable=False,
     )
 
-    roles: Mapped[list["UserRole"]] = relationship(back_populates="user")
+    roles: Mapped[list["UserRole"]] = relationship(
+        "app.users.models.UserRole",
+        back_populates="user",
+    )
 
 
 class Role(Base):
@@ -62,7 +63,10 @@ class Role(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
-    permissions: Mapped[list["RolePermission"]] = relationship(back_populates="role")
+    permissions: Mapped[list["RolePermission"]] = relationship(
+        "app.users.models.RolePermission",
+        back_populates="role",
+    )
 
 
 class Permission(Base):
@@ -89,8 +93,8 @@ class UserRole(Base):
     user_id: Mapped[UUID] = mapped_column(ForeignKey("auth_users.id"), primary_key=True)
     role_id: Mapped[UUID] = mapped_column(ForeignKey("auth_roles.id"), primary_key=True)
 
-    user: Mapped[User] = relationship(back_populates="roles")
-    role: Mapped[Role] = relationship()
+    user: Mapped[User] = relationship("app.users.models.User", back_populates="roles")
+    role: Mapped[Role] = relationship("app.users.models.Role")
 
 
 class RolePermission(Base):
@@ -105,6 +109,5 @@ class RolePermission(Base):
     role_id: Mapped[UUID] = mapped_column(ForeignKey("auth_roles.id"), primary_key=True)
     permission_id: Mapped[UUID] = mapped_column(ForeignKey("auth_permissions.id"), primary_key=True)
 
-    role: Mapped[Role] = relationship(back_populates="permissions")
-    permission: Mapped[Permission] = relationship()
-
+    role: Mapped[Role] = relationship("app.users.models.Role", back_populates="permissions")
+    permission: Mapped[Permission] = relationship("app.users.models.Permission")

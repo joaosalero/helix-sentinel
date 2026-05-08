@@ -8,13 +8,12 @@ processors:
   batch:
 
 exporters:
-  logging:
-    verbosity: normal
+  debug:
+    verbosity: basic
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [logging]
-
+      exporters: [debug]

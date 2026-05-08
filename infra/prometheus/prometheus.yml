@@ -1,9 +1,15 @@
 global:
   scrape_interval: 15s
+  evaluation_interval: 15s
+
+external_labels:
+  platform: helix-sentinel
+  environment: local
 
 scrape_configs:
   - job_name: helix-sentinel-api
     metrics_path: /metrics
     static_configs:
       - targets: ["host.docker.internal:8000"]
-
+        labels:
+          service: api

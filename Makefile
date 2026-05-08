@@ -20,7 +20,7 @@ security:
 	pip-audit
 
 up:
-	docker compose up -d postgres redis prometheus grafana
+	docker compose up -d postgres redis prometheus otel-collector grafana
 
 down:
 	docker compose down

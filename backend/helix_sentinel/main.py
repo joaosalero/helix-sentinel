@@ -18,7 +18,7 @@ from app.audit.repositories import PostgresAuditRepository
 from app.core.config.settings import get_security_settings
 from app.core.exceptions.security import register_security_exception_handlers
 from app.detections.repositories import PostgresDetectionRuleRepository
-from app.enrichment.repositories import InMemoryIOCRepository
+from app.enrichment.repositories import PostgresIOCRepository
 from app.events.repositories import PostgresEventRepository
 from app.users.repositories import PostgresUserRepository
 from helix_sentinel.api.router import api_router
@@ -29,6 +29,7 @@ from helix_sentinel.core.middleware import register_middleware
 from helix_sentinel.db.session import create_session_factory
 from helix_sentinel.observability.metrics import metrics_router
 from helix_sentinel.observability.telemetry import configure_tracing
+from helix_sentinel.services.redis import create_redis_client
 
 
 @asynccontextmanager
@@ -36,7 +37,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage process-level startup and shutdown hooks."""
     settings = get_settings()
     app.state.settings = settings
-    yield
+    try:
+        yield
+    finally:
+        redis_client = getattr(app.state, "redis_client", None)
+        if redis_client is not None:
+            await redis_client.aclose()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -73,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 def configure_feature_state(app: FastAPI, settings: Settings) -> None:
     """Install local adapters required by the implemented feature modules."""
     app.state.db_session_factory = create_session_factory(str(settings.database_url))
+    app.state.redis_client = create_redis_client(settings)
     app.state.user_repository = PostgresUserRepository(app.state.db_session_factory)
     app.state.audit_repository = PostgresAuditRepository(app.state.db_session_factory)
     event_repository = PostgresEventRepository(app.state.db_session_factory)
@@ -80,7 +87,7 @@ def configure_feature_state(app: FastAPI, settings: Settings) -> None:
     app.state.detection_rule_repository = PostgresDetectionRuleRepository(
         app.state.db_session_factory
     )
-    app.state.ioc_repository = InMemoryIOCRepository()
+    app.state.ioc_repository = PostgresIOCRepository(app.state.db_session_factory)
     app.state.ai_event_repository = InMemoryAIEventRepository([])
     app.state.security_settings = get_security_settings()
 

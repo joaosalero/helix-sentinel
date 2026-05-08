@@ -3,12 +3,17 @@
 import logging
 from collections.abc import Awaitable, Callable
 from time import perf_counter
+from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from helix_sentinel.core.config import Settings
+from helix_sentinel.observability.metrics import (
+    http_request_duration_seconds,
+    http_requests_total,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +41,8 @@ def register_middleware(app: FastAPI, settings: Settings) -> None:
         correlation_id = request.headers.get("X-Correlation-ID", str(uuid4()))
         request.state.correlation_id = correlation_id
         response = await call_next(request)
-        elapsed_ms = round((perf_counter() - started_at) * 1000, 2)
+        elapsed_seconds = perf_counter() - started_at
+        elapsed_ms = round(elapsed_seconds * 1000, 2)
         response.headers["X-Correlation-ID"] = correlation_id
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
@@ -53,4 +59,15 @@ def register_middleware(app: FastAPI, settings: Settings) -> None:
                 "elapsed_ms": elapsed_ms,
             },
         )
+        route: Any = request.scope.get("route")
+        path = route.path if route is not None else request.url.path
+        http_requests_total.labels(
+            method=request.method,
+            path=str(path),
+            status_code=str(response.status_code),
+        ).inc()
+        http_request_duration_seconds.labels(
+            method=request.method,
+            path=str(path),
+        ).observe(elapsed_seconds)
         return response

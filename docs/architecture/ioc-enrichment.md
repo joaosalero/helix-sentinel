@@ -30,3 +30,5 @@ IOC creation requires `detections:write`. IOC listing, detail retrieval, summary
 ## Database Strategy
 
 `ioc_indicators` stores normalized IOC records with indexes for type, confidence, source, expiration, seen timestamps, tags, and metadata. `event_ioc_matches` stores event relationships with confidence, status, matched fields, and explainability metadata. This supports future IOC trend analytics and source quality reporting without introducing distributed enrichment workers.
+
+The authoritative runtime uses a PostgreSQL-backed IOC repository for indicator inventory and event-to-IOC match persistence. In-memory IOC repositories remain available for isolated tests and explicit local overrides.

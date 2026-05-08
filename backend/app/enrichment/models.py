@@ -47,7 +47,10 @@ class IOCIndicatorRecord(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
-    matches: Mapped[list["EventIOCMatchRecord"]] = relationship(back_populates="ioc")
+    matches: Mapped[list["EventIOCMatchRecord"]] = relationship(
+        "app.enrichment.models.EventIOCMatchRecord",
+        back_populates="ioc",
+    )
 
 
 class EventIOCMatchRecord(Base):
@@ -75,4 +78,7 @@ class EventIOCMatchRecord(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
-    ioc: Mapped[IOCIndicatorRecord] = relationship(back_populates="matches")
+    ioc: Mapped[IOCIndicatorRecord] = relationship(
+        "app.enrichment.models.IOCIndicatorRecord",
+        back_populates="matches",
+    )

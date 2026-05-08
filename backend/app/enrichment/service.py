@@ -126,6 +126,7 @@ class IOCEnrichmentService:
         ioc_enrichment_duration_seconds.observe(elapsed)
         for match in matches:
             ioc_matches_total.labels(indicator_type=match.indicator_type.value).inc()
+        await self.repository.store_matches(matches)
         await self.audit.record(
             AuditAction.IOC_ENRICHMENT_EXECUTED,
             "success",

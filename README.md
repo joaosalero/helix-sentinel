@@ -45,7 +45,7 @@ uvicorn helix_sentinel.main:create_app --factory --app-dir backend --reload
 
 `helix_sentinel.db.base.Base` is the authoritative SQLAlchemy metadata owner. Alembic targets `helix_sentinel.db.models.Base.metadata`, which registers the active feature persistence models used by `app.*`.
 
-Authentication user lookups, audit event persistence, event ingestion persistence, and detection rule persistence use PostgreSQL-backed repositories in the authoritative runtime. In-memory repositories are retained for isolated tests and explicit overrides.
+Authentication user lookups, audit event persistence, event ingestion persistence, detection rule persistence, and IOC enrichment persistence use PostgreSQL-backed repositories in the authoritative runtime. In-memory repositories are retained for isolated tests and explicit overrides.
 
 Frontend dependencies are intentionally separate:
 
@@ -65,6 +65,13 @@ make security
 make up
 make down
 ```
+
+Local observability endpoints after `make up`:
+
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3001`
+- API metrics: `http://localhost:8000/metrics`
+- API readiness: `http://localhost:8000/api/v1/ready`
 
 Required backend validation before completing changes:
 

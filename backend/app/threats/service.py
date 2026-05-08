@@ -6,6 +6,9 @@ from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
+from app.enrichment.repositories import IOCRepository
+from app.enrichment.schemas import IOCMatchActivitySummary, IOCMatchAnalyticsFilter
+from app.enrichment.taxonomy import IndicatorType as IOCIndicatorType
 from app.events.schemas import NormalizedEvent
 from app.events.taxonomy import EventCategory
 from app.threats.metrics import threat_correlation_duration_seconds, threat_correlations_total
@@ -27,8 +30,13 @@ logger = logging.getLogger(__name__)
 class ThreatAnalyticsService:
     """Generate deterministic threat insights from normalized events."""
 
-    def __init__(self, repository: ThreatEventRepository) -> None:
+    def __init__(
+        self,
+        repository: ThreatEventRepository,
+        ioc_repository: IOCRepository | None = None,
+    ) -> None:
         self.repository = repository
+        self.ioc_repository = ioc_repository
 
     async def insights(
         self,
@@ -86,6 +94,31 @@ class ThreatAnalyticsService:
             ),
             max_risk_score=max((insight.risk_score for insight in insights), default=0),
         )
+
+    async def ioc_activity(self, filters: ThreatAnalyticsFilter) -> IOCMatchActivitySummary:
+        """Return persisted IOC match activity for operational threat visibility."""
+        if self.ioc_repository is None:
+            msg = "IOC activity requires an IOC repository"
+            raise RuntimeError(msg)
+        started = perf_counter()
+        activity = await self.ioc_repository.match_activity(
+            IOCMatchAnalyticsFilter(
+                start_time=filters.start_time,
+                end_time=filters.end_time,
+                tenant_id=filters.tenant_id,
+                indicator_type=(
+                    IOCIndicatorType(filters.indicator_type.value)
+                    if filters.indicator_type is not None
+                    else None
+                ),
+                min_confidence=filters.min_confidence,
+                limit=filters.limit,
+                offset=filters.offset,
+            )
+        )
+        elapsed = perf_counter() - started
+        threat_correlation_duration_seconds.labels(operation="ioc_activity").observe(elapsed)
+        return activity
 
     def _generate(self, events: list[NormalizedEvent]) -> list[ThreatInsight]:
         insights = [

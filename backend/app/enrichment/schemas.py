@@ -150,3 +150,55 @@ class EnrichmentSummary(BaseModel):
     high_confidence_iocs: int
     expired_iocs: int
     sources: int
+
+
+class IOCMatchAnalyticsFilter(BaseModel):
+    """Validated IOC match analytics filters."""
+
+    start_time: datetime
+    end_time: datetime
+    tenant_id: str | None = Field(default=None, min_length=1, max_length=80)
+    indicator_type: IndicatorType | None = None
+    min_confidence: int = Field(default=0, ge=0, le=100)
+    limit: int = Field(default=25, ge=1, le=100)
+    offset: int = Field(default=0, ge=0, le=10_000)
+
+
+class IOCMatchTrendPoint(BaseModel):
+    """Time-bucketed IOC match count."""
+
+    bucket_start: datetime
+    count: int
+
+
+class IOCMatchMetric(BaseModel):
+    """Named IOC match aggregation item."""
+
+    name: str
+    count: int
+
+
+class TopIOCMatch(BaseModel):
+    """Frequently matched IOC summary."""
+
+    ioc_id: UUID
+    indicator_type: IndicatorType
+    value: str
+    severity: IOCSeverity
+    source_name: str
+    match_count: int
+    max_confidence: int
+    last_matched_at: datetime
+
+
+class IOCMatchActivitySummary(BaseModel):
+    """Tenant-aware IOC match activity summary for threat analytics."""
+
+    total_matches: int
+    matched_events: int
+    high_confidence_matches: int
+    active_iocs: int
+    by_indicator_type: list[IOCMatchMetric]
+    by_severity: list[IOCMatchMetric]
+    trend: list[IOCMatchTrendPoint]
+    top_iocs: list[TopIOCMatch]

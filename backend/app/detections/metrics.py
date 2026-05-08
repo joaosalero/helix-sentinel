@@ -31,3 +31,9 @@ detection_alerts_created_total = Counter(
     "Total persisted detection alerts created from rule execution.",
     ("severity", "status"),
 )
+
+detection_alert_workflow_transitions_total = Counter(
+    "helix_detection_alert_workflow_transitions_total",
+    "Total persisted detection alert investigation workflow transitions.",
+    ("from_status", "to_status"),
+)

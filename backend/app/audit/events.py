@@ -21,6 +21,7 @@ class AuditAction(StrEnum):
     DETECTION_RULE_IMPORTED = "detections.rule_imported"
     DETECTION_RULE_PARSE_FAILED = "detections.rule_parse_failed"
     DETECTION_RULE_EXECUTED = "detections.rule_executed"
+    DETECTION_ALERT_UPDATED = "detections.alert_updated"
     IOC_CREATED = "enrichment.ioc_created"
     IOC_ENRICHMENT_EXECUTED = "enrichment.executed"
 

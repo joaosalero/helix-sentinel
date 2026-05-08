@@ -162,8 +162,42 @@ class DetectionAlert(BaseModel):
     event_time: datetime
     matched_selections: list[str] = Field(default_factory=list)
     correlation_id: str | None = Field(default=None, max_length=80)
+    assigned_to: UUID | None = None
+    acknowledged_at: datetime | None = None
+    closed_at: datetime | None = None
+    disposition: str | None = Field(default=None, max_length=120)
+    investigation_note: str | None = Field(default=None, max_length=2000)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class DetectionAlertListFilters(BaseModel):
+    """Validated alert listing filters for analyst queues."""
+
+    status: DetectionAlertStatus | None = None
+    severity: DetectionSeverity | None = None
+    tenant_id: str | None = Field(default=None, min_length=1, max_length=80)
+    limit: int = Field(default=25, ge=1, le=100)
+    offset: int = Field(default=0, ge=0, le=10_000)
+
+
+class DetectionAlertListResponse(BaseModel):
+    """Paginated alert queue response."""
+
+    items: list[DetectionAlert]
+    total: int
+    limit: int
+    offset: int
+
+
+class DetectionAlertWorkflowUpdateRequest(BaseModel):
+    """Alert investigation state transition request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: DetectionAlertStatus
+    disposition: str | None = Field(default=None, max_length=120)
+    investigation_note: str | None = Field(default=None, max_length=2000)
 
 
 class DetectionExecutionResponse(BaseModel):

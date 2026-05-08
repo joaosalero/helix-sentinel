@@ -16,7 +16,7 @@ The correlation logic is intentionally deterministic and explainable. There is n
 
 ## IOC Strategy
 
-IOC metadata is extracted from normalized event fields and represented as typed references for IP, domain, URL, and hash indicators. Confidence defaults to a neutral value until future enrichment sources exist. This keeps the model ready for enrichment and IOC analytics without inventing external intelligence.
+IOC metadata is extracted from normalized event fields and represented as typed references for IP, domain, URL, and hash indicators. Persisted IOC enrichment matches are aggregated for tenant-scoped activity reporting, including match volume, matched events, confidence, severity, trend, and top matched indicators. This keeps IOC visibility operationally useful without inventing external intelligence.
 
 ## Risk Scoring
 
@@ -32,10 +32,10 @@ Threat Analytics endpoints are protected by `analytics:read`:
 
 - `/api/v1/threats/insights`
 - `/api/v1/threats/summary`
+- `/api/v1/threats/ioc-activity`
 
-Filters include time range, tenant, insight type, minimum risk score, indicator type, indicator value, limit, and offset.
+Filters include time range, tenant, insight type, minimum risk score, minimum IOC match confidence, indicator type, indicator value, limit, and offset.
 
 ## Observability
 
 Threat Analytics emits API usage counters, correlation counters by insight type, and correlation latency histograms. Logs include correlation IDs and aggregate counts only; raw payloads and sensitive metadata are not exposed.
-

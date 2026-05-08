@@ -90,6 +90,7 @@ class DetectionAlertRecord(Base):
         Index("ix_detection_alerts_tenant_status_created", "tenant_id", "status", "created_at"),
         Index("ix_detection_alerts_rule_created", "rule_id", "created_at"),
         Index("ix_detection_alerts_event", "event_id"),
+        Index("ix_detection_alerts_assigned_status", "assigned_to", "status"),
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -106,6 +107,11 @@ class DetectionAlertRecord(Base):
     event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     matched_selections: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     correlation_id: Mapped[str | None] = mapped_column(String(80))
+    assigned_to: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    disposition: Mapped[str | None] = mapped_column(String(120))
+    investigation_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )

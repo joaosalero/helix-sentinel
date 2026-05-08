@@ -84,6 +84,7 @@ class DetectionApiContext:
 
     client: AsyncClient
     engineer_token: str
+    analyst_token: str
     viewer_token: str
     repository: InMemoryDetectionRuleRepository
     alert_repository: InMemoryDetectionAlertRepository
@@ -92,6 +93,7 @@ class DetectionApiContext:
 @pytest.fixture
 async def detection_context() -> AsyncIterator[DetectionApiContext]:
     engineer_roles = frozenset({"engineer"})
+    analyst_roles = frozenset({"analyst"})
     viewer_roles = frozenset({"viewer"})
     engineer = StoredUser(
         id=uuid4(),
@@ -113,6 +115,16 @@ async def detection_context() -> AsyncIterator[DetectionApiContext]:
         roles=viewer_roles,
         permissions=permissions_for_roles(viewer_roles),
     )
+    analyst = StoredUser(
+        id=uuid4(),
+        tenant_id="tenant-a",
+        email="analyst@example.com",
+        display_name="SOC Analyst",
+        password_hash=hash_password("valid analyst password"),
+        status=UserStatus.ACTIVE,
+        roles=analyst_roles,
+        permissions=permissions_for_roles(analyst_roles),
+    )
     repository = InMemoryDetectionRuleRepository()
     alert_repository = InMemoryDetectionAlertRepository()
     event_repository = InMemoryEventRepository()
@@ -132,7 +144,7 @@ async def detection_context() -> AsyncIterator[DetectionApiContext]:
         )
     )
     app = create_security_app()
-    app.state.user_repository = InMemoryUserRepository([engineer, viewer])
+    app.state.user_repository = InMemoryUserRepository([engineer, analyst, viewer])
     app.state.detection_rule_repository = repository
     app.state.detection_alert_repository = alert_repository
     app.state.event_repository = event_repository
@@ -151,9 +163,14 @@ async def detection_context() -> AsyncIterator[DetectionApiContext]:
             "/api/v1/auth/login",
             json={"email": "viewer@example.com", "password": "valid viewer password"},
         )
+        analyst_login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "analyst@example.com", "password": "valid analyst password"},
+        )
         yield DetectionApiContext(
             client=client,
             engineer_token=engineer_login.json()["access_token"],
+            analyst_token=analyst_login.json()["access_token"],
             viewer_token=viewer_login.json()["access_token"],
             repository=repository,
             alert_repository=alert_repository,
@@ -303,6 +320,125 @@ async def test_active_rule_execution_matches_bounded_events(
     assert alert.tenant_id == "tenant-a"
     assert alert.rule_id == UUID(str(body["id"]))
     assert alert.status == "open"
+
+
+async def test_alert_queue_lists_tenant_scoped_persisted_alerts(
+    detection_context: DetectionApiContext,
+) -> None:
+    body = await _import_rule(detection_context, EXECUTION_RULE, status="active")
+    await detection_context.client.post(
+        f"/api/v1/detections/rules/{body['id']}/execute",
+        headers={"Authorization": f"Bearer {detection_context.engineer_token}"},
+        json={
+            "start_time": "2026-05-08T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "tenant_id": "tenant-a",
+        },
+    )
+
+    response = await detection_context.client.get(
+        "/api/v1/detections/alerts",
+        headers={"Authorization": f"Bearer {detection_context.analyst_token}"},
+        params={"status": "open"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["tenant_id"] == "tenant-a"
+    assert payload["items"][0]["status"] == "open"
+
+
+async def test_analyst_can_acknowledge_and_close_alert(
+    detection_context: DetectionApiContext,
+) -> None:
+    body = await _import_rule(detection_context, EXECUTION_RULE, status="active")
+    await detection_context.client.post(
+        f"/api/v1/detections/rules/{body['id']}/execute",
+        headers={"Authorization": f"Bearer {detection_context.engineer_token}"},
+        json={
+            "start_time": "2026-05-08T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "tenant_id": "tenant-a",
+        },
+    )
+    alert_id = detection_context.alert_repository.alerts[0].id
+
+    acknowledged = await detection_context.client.patch(
+        f"/api/v1/detections/alerts/{alert_id}",
+        headers={"Authorization": f"Bearer {detection_context.analyst_token}"},
+        json={"status": "acknowledged", "investigation_note": "Review started"},
+    )
+    closed = await detection_context.client.patch(
+        f"/api/v1/detections/alerts/{alert_id}",
+        headers={"Authorization": f"Bearer {detection_context.analyst_token}"},
+        json={
+            "status": "closed",
+            "disposition": "true_positive",
+            "investigation_note": "Confirmed suspicious execution",
+        },
+    )
+
+    assert acknowledged.status_code == 200
+    assert acknowledged.json()["status"] == "acknowledged"
+    assert acknowledged.json()["assigned_to"] is not None
+    assert closed.status_code == 200
+    assert closed.json()["status"] == "closed"
+    assert closed.json()["disposition"] == "true_positive"
+    assert closed.json()["closed_at"] is not None
+
+
+async def test_viewer_cannot_update_alert_workflow(
+    detection_context: DetectionApiContext,
+) -> None:
+    body = await _import_rule(detection_context, EXECUTION_RULE, status="active")
+    await detection_context.client.post(
+        f"/api/v1/detections/rules/{body['id']}/execute",
+        headers={"Authorization": f"Bearer {detection_context.engineer_token}"},
+        json={
+            "start_time": "2026-05-08T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "tenant_id": "tenant-a",
+        },
+    )
+    alert_id = detection_context.alert_repository.alerts[0].id
+
+    response = await detection_context.client.patch(
+        f"/api/v1/detections/alerts/{alert_id}",
+        headers={"Authorization": f"Bearer {detection_context.viewer_token}"},
+        json={"status": "acknowledged"},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_closed_alert_cannot_be_reopened(
+    detection_context: DetectionApiContext,
+) -> None:
+    body = await _import_rule(detection_context, EXECUTION_RULE, status="active")
+    await detection_context.client.post(
+        f"/api/v1/detections/rules/{body['id']}/execute",
+        headers={"Authorization": f"Bearer {detection_context.engineer_token}"},
+        json={
+            "start_time": "2026-05-08T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "tenant_id": "tenant-a",
+        },
+    )
+    alert_id = detection_context.alert_repository.alerts[0].id
+    await detection_context.client.patch(
+        f"/api/v1/detections/alerts/{alert_id}",
+        headers={"Authorization": f"Bearer {detection_context.analyst_token}"},
+        json={"status": "closed"},
+    )
+
+    response = await detection_context.client.patch(
+        f"/api/v1/detections/alerts/{alert_id}",
+        headers={"Authorization": f"Bearer {detection_context.analyst_token}"},
+        json={"status": "open"},
+    )
+
+    assert response.status_code == 409
 
 
 async def test_cross_tenant_rule_execution_is_rejected(

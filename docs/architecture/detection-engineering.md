@@ -14,6 +14,7 @@ The initial implementation supports:
 - Secure APIs for import, listing, filtering, pagination, and detail retrieval.
 - Bounded active-rule execution over persisted normalized events.
 - PostgreSQL-backed open alert records for matched rule/event pairs.
+- Tenant-scoped alert queues and lightweight analyst state transitions.
 
 It intentionally does not implement realtime detection execution, SIEM query translation, XDR adaptation, correlation, simulation, or response orchestration.
 
@@ -23,7 +24,7 @@ Sigma parsing uses `yaml.safe_load` and accepts only YAML mappings with a non-em
 
 ## Execution Lifecycle
 
-Detection execution is synchronous and bounded by tenant, time range, optional source, and event limit. Only active rules produce matches. Evaluation uses normalized event fields and conservative Sigma-style selectors such as exact, contains, startswith, and endswith comparisons. Matched rule/event pairs create de-duplicated `open` alert records while execution remains synchronous. Execution emits audit events and Prometheus counters, but does not create incident records.
+Detection execution is synchronous and bounded by tenant, time range, optional source, and event limit. Only active rules produce matches. Evaluation uses normalized event fields and conservative Sigma-style selectors such as exact, contains, startswith, and endswith comparisons. Matched rule/event pairs create de-duplicated `open` alert records while execution remains synchronous. Analysts can move alerts from `open` to `acknowledged` to `closed`, with assignment, timestamps, disposition, and a concise investigation note. Execution and alert workflow changes emit audit events and Prometheus counters, but do not create incident records.
 
 ## ATT&CK Mapping
 

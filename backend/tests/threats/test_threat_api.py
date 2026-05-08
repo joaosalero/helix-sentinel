@@ -12,6 +12,9 @@ from app.api.app import create_security_app
 from app.auth.rbac import permissions_for_roles
 from app.core.config.settings import SecuritySettings
 from app.core.security.passwords import hash_password
+from app.enrichment.repositories import InMemoryIOCRepository
+from app.enrichment.schemas import EventIOCMatch, IOCCreateRequest
+from app.enrichment.taxonomy import EnrichmentStatus, IndicatorType
 from app.events.repositories import InMemoryEventRepository
 from app.events.schemas import NormalizedActor, NormalizedEvent
 from app.events.taxonomy import EventCategory, EventSeverity
@@ -75,8 +78,35 @@ async def threat_context() -> AsyncIterator[ThreatApiContext]:
     event_repository.normalized_events.extend(
         [_event(index, base + timedelta(minutes=index * 5)) for index in range(5)]
     )
+    ioc_repository = InMemoryIOCRepository()
+    ioc = await ioc_repository.create(
+        IOCCreateRequest(
+            indicator_type=IndicatorType.IP,
+            value="203.0.113.50",
+            confidence=85,
+            severity="high",
+            source_name="internal-ti",
+            source_reliability="verified",
+        )
+    )
+    await ioc_repository.store_matches(
+        [
+            EventIOCMatch(
+                event_id=event_repository.normalized_events[0].id,
+                ioc_id=ioc.id,
+                indicator_type=IndicatorType.IP,
+                value=ioc.value,
+                status=EnrichmentStatus.MATCHED,
+                confidence=90,
+                confidence_factors=[],
+                matched_fields=["actor.ip_address"],
+                metadata={"tenant_id": "tenant-a"},
+            )
+        ]
+    )
     app = create_security_app()
     app.state.event_repository = event_repository
+    app.state.ioc_repository = ioc_repository
     app.state.user_repository = InMemoryUserRepository([analyst, viewer])
     app.state.security_settings = SecuritySettings(
         environment="test",
@@ -150,6 +180,28 @@ async def test_threat_summary_returns_counts(threat_context: ThreatApiContext) -
     assert response.status_code == 200
     assert response.json()["suspicious_ip_reuse"] == 1
     assert response.json()["total_insights"] >= 1
+
+
+async def test_ioc_activity_returns_tenant_scoped_match_analytics(
+    threat_context: ThreatApiContext,
+) -> None:
+    response = await threat_context.client.get(
+        "/api/v1/threats/ioc-activity",
+        params={
+            "start_time": "2026-05-08T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "indicator_type": "ip",
+            "min_confidence": "80",
+        },
+        headers={"Authorization": f"Bearer {threat_context.analyst_token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_matches"] == 1
+    assert body["matched_events"] == 1
+    assert body["high_confidence_matches"] == 1
+    assert body["top_iocs"][0]["value"] == "203.0.113.50"
 
 
 async def test_invalid_threat_time_range_is_rejected(threat_context: ThreatApiContext) -> None:

@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 
+from app.events.repositories import EventRepository, NormalizedEventQuery
 from app.events.schemas import NormalizedEvent
 from app.threats.schemas import ThreatAnalyticsFilter
 
@@ -28,3 +29,18 @@ class InMemoryThreatEventRepository:
             and (filters.tenant_id is None or event.tenant_id == filters.tenant_id)
         ]
 
+
+class EventRepositoryThreatEventRepository:
+    """Threat event reader backed by the normalized event repository."""
+
+    def __init__(self, repository: EventRepository) -> None:
+        self.repository = repository
+
+    async def list_events(self, filters: ThreatAnalyticsFilter) -> list[NormalizedEvent]:
+        return await self.repository.list_normalized_events(
+            NormalizedEventQuery(
+                start_time=filters.start_time,
+                end_time=filters.end_time,
+                tenant_id=filters.tenant_id,
+            )
+        )

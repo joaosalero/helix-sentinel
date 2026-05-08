@@ -1,9 +1,10 @@
 """Detection rule repository contracts and in-memory implementation."""
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
@@ -16,6 +17,8 @@ from app.detections.models import (
 from app.detections.schemas import (
     AttackTechnique,
     DetectionAlert,
+    DetectionAlertListFilters,
+    DetectionAlertStatus,
     DetectionRule,
     DetectionRuleListFilters,
     DetectionRuleMetadata,
@@ -104,6 +107,30 @@ class DetectionAlertRepository:
         """Persist new alerts and return the number of created records."""
         raise NotImplementedError
 
+    async def get(self, alert_id: UUID, tenant_id: str) -> DetectionAlert | None:
+        """Return one alert within a tenant boundary."""
+        raise NotImplementedError
+
+    async def list(self, filters: DetectionAlertListFilters) -> tuple[list[DetectionAlert], int]:
+        """Return tenant-scoped alerts for analyst queues."""
+        raise NotImplementedError
+
+    async def update_workflow(
+        self,
+        alert_id: UUID,
+        tenant_id: str,
+        *,
+        status: DetectionAlertStatus,
+        assigned_to: UUID | None,
+        acknowledged_at: datetime | None,
+        closed_at: datetime | None,
+        disposition: str | None,
+        investigation_note: str | None,
+        updated_at: datetime,
+    ) -> DetectionAlert | None:
+        """Persist an analyst investigation state transition."""
+        raise NotImplementedError
+
 
 @dataclass
 class InMemoryDetectionAlertRepository(DetectionAlertRepository):
@@ -122,6 +149,57 @@ class InMemoryDetectionAlertRepository(DetectionAlertRepository):
             existing.add(key)
         self.alerts.extend(created)
         return len(created)
+
+    async def get(self, alert_id: UUID, tenant_id: str) -> DetectionAlert | None:
+        return next(
+            (
+                alert
+                for alert in self.alerts
+                if alert.id == alert_id and alert.tenant_id == tenant_id
+            ),
+            None,
+        )
+
+    async def list(self, filters: DetectionAlertListFilters) -> tuple[list[DetectionAlert], int]:
+        filtered = [
+            alert
+            for alert in self.alerts
+            if (filters.tenant_id is None or alert.tenant_id == filters.tenant_id)
+            and (filters.status is None or alert.status == filters.status)
+            and (filters.severity is None or alert.severity == filters.severity)
+        ]
+        filtered.sort(key=lambda alert: alert.updated_at, reverse=True)
+        return filtered[filters.offset : filters.offset + filters.limit], len(filtered)
+
+    async def update_workflow(
+        self,
+        alert_id: UUID,
+        tenant_id: str,
+        *,
+        status: DetectionAlertStatus,
+        assigned_to: UUID | None,
+        acknowledged_at: datetime | None,
+        closed_at: datetime | None,
+        disposition: str | None,
+        investigation_note: str | None,
+        updated_at: datetime,
+    ) -> DetectionAlert | None:
+        alert = await self.get(alert_id, tenant_id)
+        if alert is None:
+            return None
+        updated = alert.model_copy(
+            update={
+                "status": status,
+                "assigned_to": assigned_to,
+                "acknowledged_at": acknowledged_at,
+                "closed_at": closed_at,
+                "disposition": disposition,
+                "investigation_note": investigation_note,
+                "updated_at": updated_at,
+            }
+        )
+        self.alerts = [updated if current.id == alert_id else current for current in self.alerts]
+        return updated
 
 
 class PostgresDetectionAlertRepository(DetectionAlertRepository):
@@ -144,6 +222,67 @@ class PostgresDetectionAlertRepository(DetectionAlertRepository):
             result = await session.execute(statement)
             return len(result.scalars().all())
 
+    async def get(self, alert_id: UUID, tenant_id: str) -> DetectionAlert | None:
+        async with self.session_factory() as session:
+            record = await session.scalar(
+                select(DetectionAlertRecord).where(
+                    DetectionAlertRecord.id == alert_id,
+                    DetectionAlertRecord.tenant_id == tenant_id,
+                )
+            )
+            return _to_alert_schema(record) if record is not None else None
+
+    async def list(self, filters: DetectionAlertListFilters) -> tuple[list[DetectionAlert], int]:
+        async with self.session_factory() as session:
+            statement = _filtered_alert_statement(filters)
+            records = list(
+                (
+                    await session.scalars(
+                        statement.order_by(DetectionAlertRecord.updated_at.desc())
+                        .offset(filters.offset)
+                        .limit(filters.limit)
+                    )
+                ).all()
+            )
+            total = await session.scalar(
+                select(func.count()).select_from(_filtered_alert_statement(filters).subquery())
+            )
+            return [_to_alert_schema(record) for record in records], int(total or 0)
+
+    async def update_workflow(
+        self,
+        alert_id: UUID,
+        tenant_id: str,
+        *,
+        status: DetectionAlertStatus,
+        assigned_to: UUID | None,
+        acknowledged_at: datetime | None,
+        closed_at: datetime | None,
+        disposition: str | None,
+        investigation_note: str | None,
+        updated_at: datetime,
+    ) -> DetectionAlert | None:
+        statement = (
+            update(DetectionAlertRecord)
+            .where(
+                DetectionAlertRecord.id == alert_id,
+                DetectionAlertRecord.tenant_id == tenant_id,
+            )
+            .values(
+                status=status.value,
+                assigned_to=assigned_to,
+                acknowledged_at=acknowledged_at,
+                closed_at=closed_at,
+                disposition=disposition,
+                investigation_note=investigation_note,
+                updated_at=updated_at,
+            )
+            .returning(DetectionAlertRecord)
+        )
+        async with self.session_factory() as session, session.begin():
+            record = await session.scalar(statement)
+            return _to_alert_schema(record) if record is not None else None
+
 
 def _filtered_statement(filters: DetectionRuleListFilters) -> Select[tuple[DetectionRuleRecord]]:
     statement = select(DetectionRuleRecord).options(
@@ -163,6 +302,19 @@ def _filtered_statement(filters: DetectionRuleListFilters) -> Select[tuple[Detec
                 DetectionAttackMappingRecord.technique_id == filters.attack_technique
             )
         )
+    return statement
+
+
+def _filtered_alert_statement(
+    filters: DetectionAlertListFilters,
+) -> Select[tuple[DetectionAlertRecord]]:
+    statement = select(DetectionAlertRecord)
+    if filters.tenant_id is not None:
+        statement = statement.where(DetectionAlertRecord.tenant_id == filters.tenant_id)
+    if filters.status is not None:
+        statement = statement.where(DetectionAlertRecord.status == filters.status.value)
+    if filters.severity is not None:
+        statement = statement.where(DetectionAlertRecord.severity == filters.severity.value)
     return statement
 
 
@@ -254,6 +406,37 @@ def _to_alert_record_values(alert: DetectionAlert) -> dict[str, object]:
         "event_time": alert.event_time,
         "matched_selections": alert.matched_selections,
         "correlation_id": alert.correlation_id,
+        "assigned_to": alert.assigned_to,
+        "acknowledged_at": alert.acknowledged_at,
+        "closed_at": alert.closed_at,
+        "disposition": alert.disposition,
+        "investigation_note": alert.investigation_note,
         "created_at": alert.created_at,
         "updated_at": alert.updated_at,
     }
+
+
+def _to_alert_schema(record: DetectionAlertRecord) -> DetectionAlert:
+    return DetectionAlert.model_validate(
+        {
+            "id": record.id,
+            "tenant_id": record.tenant_id,
+            "rule_id": record.rule_id,
+            "event_id": record.event_id,
+            "status": record.status,
+            "severity": record.severity,
+            "category": record.category,
+            "title": record.title,
+            "source_name": record.source_name,
+            "event_time": record.event_time,
+            "matched_selections": record.matched_selections,
+            "correlation_id": record.correlation_id,
+            "assigned_to": record.assigned_to,
+            "acknowledged_at": record.acknowledged_at,
+            "closed_at": record.closed_at,
+            "disposition": record.disposition,
+            "investigation_note": record.investigation_note,
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+        }
+    )

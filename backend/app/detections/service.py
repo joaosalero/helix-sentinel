@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 from app.audit.events import AuditAction
 from app.audit.service import AuditService
 from app.detections.metrics import (
+    detection_alert_workflow_transitions_total,
     detection_alerts_created_total,
     detection_rule_executions_total,
     detection_rule_imports_total,
@@ -19,7 +20,10 @@ from app.detections.parser import SigmaParser
 from app.detections.repositories import DetectionAlertRepository, DetectionRuleRepository
 from app.detections.schemas import (
     DetectionAlert,
+    DetectionAlertListFilters,
+    DetectionAlertListResponse,
     DetectionAlertStatus,
+    DetectionAlertWorkflowUpdateRequest,
     DetectionExecutionMatch,
     DetectionExecutionRequest,
     DetectionExecutionResponse,
@@ -122,6 +126,103 @@ class DetectionRuleService:
             limit=filters.limit,
             offset=filters.offset,
         )
+
+    async def list_alerts(
+        self,
+        filters: DetectionAlertListFilters,
+    ) -> DetectionAlertListResponse:
+        """Return tenant-scoped alerts for analyst investigation queues."""
+        if self.alert_repository is None:
+            msg = "Alert listing requires an alert repository"
+            raise RuntimeError(msg)
+        alerts, total = await self.alert_repository.list(filters)
+        return DetectionAlertListResponse(
+            items=alerts,
+            total=total,
+            limit=filters.limit,
+            offset=filters.offset,
+        )
+
+    async def get_alert(self, alert_id: UUID, tenant_id: str) -> DetectionAlert | None:
+        """Return one tenant-scoped alert."""
+        if self.alert_repository is None:
+            msg = "Alert retrieval requires an alert repository"
+            raise RuntimeError(msg)
+        return await self.alert_repository.get(alert_id, tenant_id)
+
+    async def update_alert_workflow(
+        self,
+        alert_id: UUID,
+        tenant_id: str,
+        request: DetectionAlertWorkflowUpdateRequest,
+        *,
+        actor_id: UUID,
+        actor_email: str | None,
+        correlation_id: str | None,
+    ) -> DetectionAlert | None:
+        """Apply a lightweight analyst investigation state transition."""
+        if self.alert_repository is None:
+            msg = "Alert workflow updates require an alert repository"
+            raise RuntimeError(msg)
+        alert = await self.alert_repository.get(alert_id, tenant_id)
+        if alert is None:
+            return None
+        if not _valid_alert_transition(alert.status, request.status):
+            msg = f"invalid alert transition from {alert.status.value} to {request.status.value}"
+            raise ValueError(msg)
+        now = datetime.now(UTC)
+        acknowledged_at = alert.acknowledged_at
+        closed_at = alert.closed_at
+        assigned_to = alert.assigned_to
+        if request.status == DetectionAlertStatus.ACKNOWLEDGED:
+            acknowledged_at = acknowledged_at or now
+            assigned_to = assigned_to or actor_id
+        if request.status == DetectionAlertStatus.CLOSED:
+            acknowledged_at = acknowledged_at or now
+            closed_at = closed_at or now
+            assigned_to = assigned_to or actor_id
+        updated = await self.alert_repository.update_workflow(
+            alert_id,
+            tenant_id,
+            status=request.status,
+            assigned_to=assigned_to,
+            acknowledged_at=acknowledged_at,
+            closed_at=closed_at,
+            disposition=request.disposition,
+            investigation_note=request.investigation_note,
+            updated_at=now,
+        )
+        if updated is None:
+            return None
+        detection_alert_workflow_transitions_total.labels(
+            from_status=alert.status.value,
+            to_status=updated.status.value,
+        ).inc()
+        await self.audit.record(
+            AuditAction.DETECTION_ALERT_UPDATED,
+            "success",
+            actor_id=actor_id,
+            actor_email=actor_email,
+            resource=str(alert_id),
+            correlation_id=correlation_id,
+            metadata={
+                "tenant_id": tenant_id,
+                "from_status": alert.status.value,
+                "to_status": updated.status.value,
+                "disposition": updated.disposition,
+            },
+        )
+        logger.info(
+            "Detection alert workflow updated",
+            extra={
+                "correlation_id": correlation_id,
+                "alert_id": str(alert_id),
+                "tenant_id": tenant_id,
+                "from_status": alert.status.value,
+                "to_status": updated.status.value,
+            },
+        )
+        return updated
 
     async def execute(
         self,
@@ -246,6 +347,19 @@ def _summary(rule: DetectionRule) -> DetectionRuleSummary:
         attack_techniques=[technique.technique_id for technique in rule.attack],
         updated_at=rule.updated_at,
     )
+
+
+def _valid_alert_transition(
+    current: DetectionAlertStatus,
+    requested: DetectionAlertStatus,
+) -> bool:
+    if current == requested:
+        return True
+    if current == DetectionAlertStatus.OPEN:
+        return requested in {DetectionAlertStatus.ACKNOWLEDGED, DetectionAlertStatus.CLOSED}
+    if current == DetectionAlertStatus.ACKNOWLEDGED:
+        return requested == DetectionAlertStatus.CLOSED
+    return False
 
 
 def _evaluate_rule(

@@ -1,7 +1,7 @@
 """Threat Analytics API routes."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Request
 from fastapi.encoders import jsonable_encoder
@@ -14,9 +14,15 @@ from app.core.dependencies.security import (
     resolve_current_user_from_request,
     resolve_tenant_scope_for_request,
 )
+from app.enrichment.repositories import IOCRepository
+from app.enrichment.schemas import IOCMatchActivitySummary
 from app.events.repositories import InMemoryEventRepository
 from app.threats.metrics import threat_analytics_requests_total
-from app.threats.repositories import InMemoryThreatEventRepository
+from app.threats.repositories import (
+    EventRepositoryThreatEventRepository,
+    InMemoryThreatEventRepository,
+    ThreatEventRepository,
+)
 from app.threats.schemas import ThreatAnalyticsFilter, ThreatInsightListResponse, ThreatSummary
 from app.threats.service import ThreatAnalyticsService
 
@@ -44,6 +50,16 @@ async def threat_summary(request: Request) -> ThreatSummary | JSONResponse:
     return await service.summary(filters)
 
 
+@router.get("/ioc-activity", response_model=IOCMatchActivitySummary)
+async def ioc_activity(request: Request) -> IOCMatchActivitySummary | JSONResponse:
+    """Return persisted IOC match activity for tenant-scoped threat visibility."""
+    prepared = await _prepare_request(request, "ioc_activity")
+    if isinstance(prepared, JSONResponse):
+        return prepared
+    filters, service = prepared
+    return await service.ioc_activity(filters)
+
+
 async def _prepare_request(
     request: Request,
     endpoint: str,
@@ -58,15 +74,21 @@ async def _prepare_request(
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(detail)})
     tenant_id = await resolve_tenant_scope_for_request(request, principal, filters.tenant_id)
     filters = filters.model_copy(update={"tenant_id": tenant_id})
-    return filters, ThreatAnalyticsService(await _repository(request))
+    return filters, ThreatAnalyticsService(
+        await _repository(request),
+        _ioc_repository(request),
+    )
 
 
-async def _repository(request: Request) -> InMemoryThreatEventRepository:
+async def _repository(request: Request) -> ThreatEventRepository:
     event_repository = request.app.state.event_repository
     if isinstance(event_repository, InMemoryEventRepository):
         return InMemoryThreatEventRepository(event_repository.normalized_events)
-    events = await event_repository.list_normalized_events()
-    return InMemoryThreatEventRepository(events)
+    return EventRepositoryThreatEventRepository(event_repository)
+
+
+def _ioc_repository(request: Request) -> IOCRepository:
+    return cast(IOCRepository, request.app.state.ioc_repository)
 
 
 def _query_params(request: Request) -> dict[str, Any]:

@@ -22,3 +22,4 @@ tmp/
 backend/alembic/versions/*.py
 !backend/alembic/versions/.gitkeep
 !backend/alembic/versions/20260508_007_detection_alerts.py
+!backend/alembic/versions/20260508_008_alert_investigation_workflow.py

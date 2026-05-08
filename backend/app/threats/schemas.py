@@ -19,6 +19,7 @@ class ThreatAnalyticsFilter(BaseModel):
     tenant_id: str | None = Field(default=None, min_length=1, max_length=80)
     insight_type: ThreatInsightType | None = None
     min_risk_score: int = Field(default=0, ge=0, le=100)
+    min_confidence: int = Field(default=0, ge=0, le=100)
     indicator_type: IndicatorType | None = None
     indicator_value: str | None = Field(default=None, min_length=1, max_length=500)
     limit: int = Field(default=25, ge=1, le=100)
@@ -98,4 +99,3 @@ class ThreatSummary(BaseModel):
     endpoint_repetition: int
     event_bursts: int
     max_risk_score: int
-

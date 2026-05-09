@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -547,7 +548,11 @@ def _average(values: list[float]) -> float | None:
 
 
 def _rounded_float(value: object) -> float | None:
-    return round(float(value), 2) if value is not None else None
+    if value is None:
+        return None
+    if isinstance(value, int | float | Decimal | str):
+        return round(float(value), 2)
+    raise TypeError(f"Unsupported numeric aggregate value: {type(value).__name__}")
 
 
 def _contains_text(value: str | None, expected: str | None) -> bool:

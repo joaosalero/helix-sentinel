@@ -115,9 +115,54 @@ export type DetectionAlert = {
   updated_at: string;
 };
 
+export type NormalizedActor = {
+  user_id?: string | null;
+  username?: string | null;
+  email?: string | null;
+  ip_address?: string | null;
+};
+
+export type NormalizedAsset = {
+  asset_id?: string | null;
+  hostname?: string | null;
+  ip_address?: string | null;
+};
+
+export type NormalizedEvent = {
+  id: string;
+  raw_event_id: string;
+  tenant_id: string;
+  source_name: string;
+  source_product: string | null;
+  source_vendor: string | null;
+  category: string;
+  severity: "info" | "low" | "medium" | "high" | "critical" | string;
+  event_time: string;
+  ingested_at: string;
+  title: string;
+  actor: NormalizedActor;
+  asset: NormalizedAsset;
+  network: Record<string, unknown>;
+  ioc: Record<string, unknown>;
+  enrichment: Record<string, unknown>;
+  normalization_version: string;
+};
+
+export type EventSearchResponse = {
+  items: NormalizedEvent[];
+  limit: number;
+  offset: number;
+};
+
 export type DetectionAlertListResponse = {
   items: DetectionAlert[];
   total: number;
   limit: number;
   offset: number;
+};
+
+export type AlertWorkflowUpdate = {
+  status: "acknowledged" | "closed";
+  disposition?: string;
+  investigation_note?: string;
 };

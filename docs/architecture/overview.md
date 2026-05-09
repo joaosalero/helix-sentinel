@@ -27,4 +27,4 @@ The schema is vector-ready: future pgvector columns can be introduced in AI enri
 
 ## Frontend Boundary
 
-The frontend is a Next.js application with TypeScript, TailwindCSS, and shadcn/ui conventions. Its first operational surface is a server-rendered SOC operations dashboard backed by typed API clients for SOC reporting and open alert queues. API bearer tokens are read from server-only environment variables, and the UI intentionally avoids client-side token storage, global state frameworks, microfrontends, and charting ecosystems.
+The frontend is a Next.js application with TypeScript, TailwindCSS, and shadcn/ui conventions. Its first operational surface is a server-rendered SOC operations dashboard backed by typed API clients for SOC reporting, open alert queues, alert detail retrieval, contextual event timelines, and lightweight investigation workflow updates. API bearer tokens are read from server-only environment variables, and the UI intentionally avoids client-side token storage, global state frameworks, microfrontends, graph visualization systems, and charting ecosystems.

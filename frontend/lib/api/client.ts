@@ -1,6 +1,9 @@
 import type {
+  AlertWorkflowUpdate,
   ApiResult,
+  DetectionAlert,
   DetectionAlertListResponse,
+  EventSearchResponse,
   SocReport,
 } from "@/lib/api/types";
 
@@ -25,8 +28,12 @@ function buildUrl(path: string, query?: Record<string, QueryValue>): string {
 async function requestJson<T>(
   path: string,
   query?: Record<string, QueryValue>,
+  init?: RequestInit,
 ): Promise<ApiResult<T>> {
   const headers = new Headers({ Accept: "application/json" });
+  for (const [key, value] of new Headers(init?.headers).entries()) {
+    headers.set(key, value);
+  }
   const token = process.env.HELIX_API_TOKEN;
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
@@ -34,6 +41,7 @@ async function requestJson<T>(
 
   try {
     const response = await fetch(buildUrl(path, query), {
+      ...init,
       headers,
       cache: "no-store",
     });
@@ -85,4 +93,34 @@ export function getOpenAlerts(query: {
     ...query,
     status: "open",
   });
+}
+
+export function getAlert(
+  alertId: string,
+  query?: { tenant_id?: string },
+): Promise<ApiResult<DetectionAlert>> {
+  return requestJson<DetectionAlert>(`/detections/alerts/${alertId}`, query);
+}
+
+export function updateAlertWorkflow(
+  alertId: string,
+  payload: AlertWorkflowUpdate,
+  query?: { tenant_id?: string },
+): Promise<ApiResult<DetectionAlert>> {
+  return requestJson<DetectionAlert>(`/detections/alerts/${alertId}`, query, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getInvestigationEvents(query: {
+  start_time: string;
+  end_time: string;
+  tenant_id?: string;
+  source?: string;
+  category?: string;
+  limit?: number;
+}): Promise<ApiResult<EventSearchResponse>> {
+  return requestJson<EventSearchResponse>("/analytics/events", query);
 }

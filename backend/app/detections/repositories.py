@@ -17,14 +17,20 @@ from app.detections.models import (
     DetectionRuleRecord,
 )
 from app.detections.schemas import (
+    AttackTacticCoverage,
     AttackTechnique,
+    AttackTechniqueCoverage,
     DetectionAlert,
     DetectionAlertListFilters,
     DetectionAlertStatus,
+    DetectionCoverageFilters,
+    DetectionCoverageSummary,
     DetectionRule,
+    DetectionRuleEfficacy,
     DetectionRuleListFilters,
     DetectionRuleMetadata,
 )
+from app.detections.taxonomy import DetectionStatus
 
 
 @dataclass(frozen=True)
@@ -59,6 +65,14 @@ class DetectionRuleRepository:
         """Return filtered and paginated detection rules."""
         raise NotImplementedError
 
+    async def coverage(
+        self,
+        filters: DetectionCoverageFilters,
+        alert_repository: "DetectionAlertRepository",
+    ) -> DetectionCoverageSummary:
+        """Return detection coverage and ATT&CK activity analytics."""
+        raise NotImplementedError
+
 
 @dataclass
 class InMemoryDetectionRuleRepository(DetectionRuleRepository):
@@ -90,6 +104,17 @@ class InMemoryDetectionRuleRepository(DetectionRuleRepository):
         ]
         filtered.sort(key=lambda rule: rule.updated_at, reverse=True)
         return filtered[filters.offset : filters.offset + filters.limit], len(filtered)
+
+    async def coverage(
+        self,
+        filters: DetectionCoverageFilters,
+        alert_repository: "DetectionAlertRepository",
+    ) -> DetectionCoverageSummary:
+        return await _coverage_summary(
+            self.rules,
+            await alert_repository.rule_activity(filters),
+            filters,
+        )
 
 
 class PostgresDetectionRuleRepository(DetectionRuleRepository):
@@ -131,6 +156,27 @@ class PostgresDetectionRuleRepository(DetectionRuleRepository):
             )
             return [_to_rule_schema(record) for record in records], int(total or 0)
 
+    async def coverage(
+        self,
+        filters: DetectionCoverageFilters,
+        alert_repository: "DetectionAlertRepository",
+    ) -> DetectionCoverageSummary:
+        async with self.session_factory() as session:
+            records = list(
+                (
+                    await session.scalars(
+                        select(DetectionRuleRecord).options(
+                            selectinload(DetectionRuleRecord.attack_mappings)
+                        )
+                    )
+                ).all()
+            )
+        return await _coverage_summary(
+            [_to_rule_schema(record) for record in records],
+            await alert_repository.rule_activity(filters),
+            filters,
+        )
+
 
 class DetectionAlertRepository:
     """Persistence boundary for detection alert lifecycle records."""
@@ -156,6 +202,13 @@ class DetectionAlertRepository:
         now: datetime,
     ) -> AlertReportingSnapshot:
         """Return bounded alert workflow aggregates for SOC reporting."""
+        raise NotImplementedError
+
+    async def rule_activity(
+        self,
+        filters: DetectionCoverageFilters,
+    ) -> dict[UUID, "RuleAlertActivity"]:
+        """Return bounded rule-level alert activity."""
         raise NotImplementedError
 
     async def update_workflow(
@@ -271,6 +324,27 @@ class InMemoryDetectionAlertRepository(DetectionAlertRepository):
                 alert.disposition == "false_positive" for alert in alerts
             ),
         )
+
+    async def rule_activity(
+        self,
+        filters: DetectionCoverageFilters,
+    ) -> dict[UUID, "RuleAlertActivity"]:
+        activity: dict[UUID, RuleAlertActivity] = {}
+        for alert in self.alerts:
+            if not (
+                filters.start_time <= alert.event_time <= filters.end_time
+                and (filters.tenant_id is None or alert.tenant_id == filters.tenant_id)
+            ):
+                continue
+            current = activity.setdefault(alert.rule_id, RuleAlertActivity())
+            current.alert_count += 1
+            current.high_or_critical_alerts += int(alert.severity.value in {"high", "critical"})
+            current.open_alerts += int(alert.status == DetectionAlertStatus.OPEN)
+            current.true_positive_alerts += int(alert.disposition == "true_positive")
+            current.false_positive_alerts += int(alert.disposition == "false_positive")
+            if current.last_alert_time is None or alert.event_time > current.last_alert_time:
+                current.last_alert_time = alert.event_time
+        return activity
 
     async def update_workflow(
         self,
@@ -437,6 +511,51 @@ class PostgresDetectionAlertRepository(DetectionAlertRepository):
             false_positive_alerts=int(row.false_positive_alerts or 0),
         )
 
+    async def rule_activity(
+        self,
+        filters: DetectionCoverageFilters,
+    ) -> dict[UUID, "RuleAlertActivity"]:
+        clauses = [
+            DetectionAlertRecord.event_time >= filters.start_time,
+            DetectionAlertRecord.event_time <= filters.end_time,
+        ]
+        if filters.tenant_id is not None:
+            clauses.append(DetectionAlertRecord.tenant_id == filters.tenant_id)
+        statement = (
+            select(
+                DetectionAlertRecord.rule_id.label("rule_id"),
+                func.count().label("alert_count"),
+                _count_when(DetectionAlertRecord.severity.in_(["high", "critical"])).label(
+                    "high_or_critical_alerts"
+                ),
+                _count_when(DetectionAlertRecord.status == DetectionAlertStatus.OPEN.value).label(
+                    "open_alerts"
+                ),
+                _count_when(DetectionAlertRecord.disposition == "true_positive").label(
+                    "true_positive_alerts"
+                ),
+                _count_when(DetectionAlertRecord.disposition == "false_positive").label(
+                    "false_positive_alerts"
+                ),
+                func.max(DetectionAlertRecord.event_time).label("last_alert_time"),
+            )
+            .where(*clauses)
+            .group_by(DetectionAlertRecord.rule_id)
+        )
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement)).all()
+        return {
+            row.rule_id: RuleAlertActivity(
+                alert_count=int(row.alert_count or 0),
+                high_or_critical_alerts=int(row.high_or_critical_alerts or 0),
+                open_alerts=int(row.open_alerts or 0),
+                true_positive_alerts=int(row.true_positive_alerts or 0),
+                false_positive_alerts=int(row.false_positive_alerts or 0),
+                last_alert_time=row.last_alert_time,
+            )
+            for row in rows
+        }
+
     async def update_workflow(
         self,
         alert_id: UUID,
@@ -472,6 +591,39 @@ class PostgresDetectionAlertRepository(DetectionAlertRepository):
             return _to_alert_schema(record) if record is not None else None
 
 
+@dataclass
+class RuleAlertActivity:
+    """Bounded alert activity for one detection rule."""
+
+    alert_count: int = 0
+    high_or_critical_alerts: int = 0
+    open_alerts: int = 0
+    true_positive_alerts: int = 0
+    false_positive_alerts: int = 0
+    last_alert_time: datetime | None = None
+
+
+@dataclass
+class TechniqueCoverageAccumulator:
+    """Internal ATT&CK technique coverage accumulator."""
+
+    name: str | None = None
+    tactic: str | None = None
+    rule_ids: set[UUID] = field(default_factory=set)
+    active_rule_ids: set[UUID] = field(default_factory=set)
+    alert_count: int = 0
+    high_or_critical_alerts: int = 0
+
+
+@dataclass
+class TacticCoverageAccumulator:
+    """Internal ATT&CK tactic coverage accumulator."""
+
+    technique_ids: set[str] = field(default_factory=set)
+    rule_count: int = 0
+    alert_count: int = 0
+
+
 def _filtered_statement(
     filters: DetectionRuleListFilters,
     *,
@@ -501,6 +653,150 @@ def _filtered_statement(
             )
         )
     return statement
+
+
+async def _coverage_summary(
+    rules: list[DetectionRule],
+    activity: dict[UUID, RuleAlertActivity],
+    filters: DetectionCoverageFilters,
+) -> DetectionCoverageSummary:
+    active_rules = [rule for rule in rules if rule.status == DetectionStatus.ACTIVE]
+    mapped_rules = [rule for rule in rules if rule.attack]
+    active_mapped_rules = [rule for rule in active_rules if rule.attack]
+    rule_rows = [_rule_efficacy(rule, activity.get(rule.id)) for rule in rules]
+    alerting_rule_ids = {rule_id for rule_id, item in activity.items() if item.alert_count > 0}
+    total_alerts = sum(item.alert_count for item in activity.values())
+    true_positive_alerts = sum(item.true_positive_alerts for item in activity.values())
+    false_positive_alerts = sum(item.false_positive_alerts for item in activity.values())
+    technique_items = _technique_coverage(rules, activity)
+    tactic_items = _tactic_coverage(technique_items)
+    noisy_rules = sorted(
+        [row for row in rule_rows if row.alert_count > 0],
+        key=lambda row: (
+            row.alert_count,
+            row.high_or_critical_alerts,
+            row.last_alert_time is not None,
+        ),
+        reverse=True,
+    )[: filters.limit]
+    silent_rules = sorted(
+        [
+            row
+            for row in rule_rows
+            if row.status == DetectionStatus.ACTIVE and row.alert_count == 0
+        ],
+        key=lambda row: (row.severity.value, row.title),
+    )[: filters.limit]
+    return DetectionCoverageSummary(
+        period_start=filters.start_time,
+        period_end=filters.end_time,
+        total_rules=len(rules),
+        active_rules=len(active_rules),
+        mapped_rules=len(mapped_rules),
+        unmapped_rules=len(rules) - len(mapped_rules),
+        active_mapped_rules=len(active_mapped_rules),
+        techniques_covered=len(
+            {technique.technique_id for rule in rules for technique in rule.attack}
+        ),
+        tactics_covered=len(
+            {technique.tactic for rule in rules for technique in rule.attack if technique.tactic}
+        ),
+        coverage_ratio=round(len(mapped_rules) / len(rules), 4) if rules else 0.0,
+        alerting_rules=len(alerting_rule_ids),
+        silent_active_rules=sum(
+            rule.status == DetectionStatus.ACTIVE and rule.id not in alerting_rule_ids
+            for rule in rules
+        ),
+        total_alerts=total_alerts,
+        true_positive_rate=(
+            round(true_positive_alerts / total_alerts, 4) if total_alerts else None
+        ),
+        false_positive_rate=(
+            round(false_positive_alerts / total_alerts, 4) if total_alerts else None
+        ),
+        top_techniques=technique_items[: filters.limit],
+        tactic_coverage=tactic_items[: filters.limit],
+        noisy_rules=noisy_rules,
+        silent_rules=silent_rules,
+    )
+
+
+def _rule_efficacy(
+    rule: DetectionRule,
+    activity: RuleAlertActivity | None,
+) -> DetectionRuleEfficacy:
+    current = activity or RuleAlertActivity()
+    return DetectionRuleEfficacy(
+        rule_id=rule.id,
+        title=rule.title,
+        status=rule.status,
+        severity=rule.severity,
+        category=rule.category,
+        attack_techniques=[technique.technique_id for technique in rule.attack],
+        alert_count=current.alert_count,
+        high_or_critical_alerts=current.high_or_critical_alerts,
+        open_alerts=current.open_alerts,
+        true_positive_alerts=current.true_positive_alerts,
+        false_positive_alerts=current.false_positive_alerts,
+        last_alert_time=current.last_alert_time,
+    )
+
+
+def _technique_coverage(
+    rules: list[DetectionRule],
+    activity: dict[UUID, RuleAlertActivity],
+) -> list[AttackTechniqueCoverage]:
+    grouped: dict[str, TechniqueCoverageAccumulator] = {}
+    for rule in rules:
+        current_activity = activity.get(rule.id, RuleAlertActivity())
+        for technique in rule.attack:
+            item = grouped.setdefault(
+                technique.technique_id,
+                TechniqueCoverageAccumulator(name=technique.name, tactic=technique.tactic),
+            )
+            item.rule_ids.add(rule.id)
+            if rule.status == DetectionStatus.ACTIVE:
+                item.active_rule_ids.add(rule.id)
+            item.alert_count += current_activity.alert_count
+            item.high_or_critical_alerts += current_activity.high_or_critical_alerts
+    coverage = [
+        AttackTechniqueCoverage(
+            technique_id=technique_id,
+            name=item.name,
+            tactic=item.tactic,
+            rule_count=len(item.rule_ids),
+            active_rule_count=len(item.active_rule_ids),
+            alert_count=item.alert_count,
+            high_or_critical_alerts=item.high_or_critical_alerts,
+        )
+        for technique_id, item in grouped.items()
+    ]
+    coverage.sort(
+        key=lambda item: (item.alert_count, item.active_rule_count, item.rule_count),
+        reverse=True,
+    )
+    return coverage
+
+
+def _tactic_coverage(techniques: list[AttackTechniqueCoverage]) -> list[AttackTacticCoverage]:
+    grouped: dict[str, TacticCoverageAccumulator] = {}
+    for technique in techniques:
+        tactic = technique.tactic or "unknown"
+        item = grouped.setdefault(tactic, TacticCoverageAccumulator())
+        item.technique_ids.add(technique.technique_id)
+        item.rule_count += technique.rule_count
+        item.alert_count += technique.alert_count
+    coverage = [
+        AttackTacticCoverage(
+            tactic=tactic,
+            technique_count=len(item.technique_ids),
+            rule_count=item.rule_count,
+            alert_count=item.alert_count,
+        )
+        for tactic, item in grouped.items()
+    ]
+    coverage.sort(key=lambda item: (item.alert_count, item.rule_count), reverse=True)
+    return coverage
 
 
 def _filtered_alert_statement(

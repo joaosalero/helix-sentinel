@@ -118,11 +118,13 @@ class InMemoryIOCRepository(IOCRepository):
 
     async def store_matches(self, matches: list[EventIOCMatch]) -> None:
         existing = {(match.event_id, match.ioc_id) for match in self.matches}
-        matched_at = datetime.now(UTC)
         for match in matches:
             key = (match.event_id, match.ioc_id)
             if key in existing:
                 continue
+            matched_at = match.metadata.get("matched_at")
+            if not isinstance(matched_at, datetime):
+                matched_at = datetime.now(UTC)
             self.matches.append(
                 match.model_copy(update={"metadata": {**match.metadata, "matched_at": matched_at}})
             )

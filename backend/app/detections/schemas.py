@@ -105,6 +105,90 @@ class DetectionRuleListResponse(BaseModel):
     offset: int
 
 
+class DetectionCoverageFilters(BaseModel):
+    """Validated detection coverage analytics filters."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_time: datetime = Field(default_factory=lambda: datetime.now(UTC) - timedelta(days=30))
+    end_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    tenant_id: str | None = Field(default=None, min_length=1, max_length=80)
+    limit: int = Field(default=10, ge=1, le=25)
+
+    @model_validator(mode="after")
+    def validate_coverage_window(self) -> "DetectionCoverageFilters":
+        """Keep coverage analytics bounded to operational reporting windows."""
+        if self.end_time <= self.start_time:
+            msg = "end_time must be after start_time"
+            raise ValueError(msg)
+        if self.end_time - self.start_time > timedelta(days=180):
+            msg = "coverage window must not exceed 180 days"
+            raise ValueError(msg)
+        return self
+
+
+class AttackTechniqueCoverage(BaseModel):
+    """ATT&CK technique coverage and alert activity."""
+
+    technique_id: str
+    name: str | None = None
+    tactic: str | None = None
+    rule_count: int
+    active_rule_count: int
+    alert_count: int
+    high_or_critical_alerts: int
+
+
+class AttackTacticCoverage(BaseModel):
+    """ATT&CK tactic coverage summary."""
+
+    tactic: str
+    technique_count: int
+    rule_count: int
+    alert_count: int
+
+
+class DetectionRuleEfficacy(BaseModel):
+    """Rule-level alert efficacy summary for Detection Engineering review."""
+
+    rule_id: UUID
+    title: str
+    status: DetectionStatus
+    severity: DetectionSeverity
+    category: DetectionCategory
+    attack_techniques: list[str]
+    alert_count: int
+    high_or_critical_alerts: int
+    open_alerts: int
+    true_positive_alerts: int
+    false_positive_alerts: int
+    last_alert_time: datetime | None = None
+
+
+class DetectionCoverageSummary(BaseModel):
+    """Operational detection coverage and ATT&CK visibility summary."""
+
+    period_start: datetime
+    period_end: datetime
+    total_rules: int
+    active_rules: int
+    mapped_rules: int
+    unmapped_rules: int
+    active_mapped_rules: int
+    techniques_covered: int
+    tactics_covered: int
+    coverage_ratio: float
+    alerting_rules: int
+    silent_active_rules: int
+    total_alerts: int
+    true_positive_rate: float | None = None
+    false_positive_rate: float | None = None
+    top_techniques: list[AttackTechniqueCoverage]
+    tactic_coverage: list[AttackTacticCoverage]
+    noisy_rules: list[DetectionRuleEfficacy]
+    silent_rules: list[DetectionRuleEfficacy]
+
+
 class DetectionExecutionRequest(BaseModel):
     """Bounded execution request for evaluating one active rule over events."""
 

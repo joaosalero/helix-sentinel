@@ -1,6 +1,7 @@
 import { SocDashboard } from "@/features/soc-dashboard/soc-dashboard";
 import {
   getAlert,
+  getDetectionCoverage,
   getInvestigationEvents,
   getOpenAlerts,
   getSocReport,
@@ -25,9 +26,10 @@ export default async function Home({ searchParams }: HomeProps) {
     tenant_id: searchParams?.tenant_id,
   };
 
-  const [report, alerts, selectedAlert] = await Promise.all([
+  const [report, alerts, coverage, selectedAlert] = await Promise.all([
     getSocReport(params),
     getOpenAlerts({ tenant_id: searchParams?.tenant_id, limit: 8 }),
+    getDetectionCoverage({ ...params, limit: 6 }),
     searchParams?.alert_id
       ? getAlert(searchParams.alert_id, { tenant_id: searchParams.tenant_id })
       : Promise.resolve(null),
@@ -39,6 +41,7 @@ export default async function Home({ searchParams }: HomeProps) {
   return (
     <SocDashboard
       alerts={alerts}
+      coverage={coverage}
       investigationEvents={investigationEvents}
       report={report}
       selectedAlert={selectedAlert}

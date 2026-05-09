@@ -1,6 +1,7 @@
 """Detection Engineering API routes."""
 
-from typing import cast
+from datetime import datetime
+from typing import Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Request, status
@@ -27,6 +28,8 @@ from app.detections.schemas import (
     DetectionAlertListFilters,
     DetectionAlertListResponse,
     DetectionAlertWorkflowUpdateRequest,
+    DetectionCoverageFilters,
+    DetectionCoverageSummary,
     DetectionExecutionRequest,
     DetectionExecutionResponse,
     DetectionRule,
@@ -80,6 +83,26 @@ async def list_detection_rules(request: Request) -> DetectionRuleListResponse | 
     except ValidationError as exc:
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
     return await _service(request).list(filters)
+
+
+@router.get("/coverage", response_model=DetectionCoverageSummary)
+async def detection_coverage(request: Request) -> DetectionCoverageSummary | JSONResponse:
+    """Return tenant-scoped alert efficacy and ATT&CK coverage visibility."""
+    principal = await resolve_current_user_from_request(request)
+    await ensure_permissions_for_request(
+        request,
+        principal,
+        {Permission.DETECTIONS_READ.value, Permission.ANALYTICS_READ.value},
+    )
+    detection_rule_api_requests_total.labels(endpoint="coverage").inc()
+    try:
+        filters = DetectionCoverageFilters.model_validate(_query_params(request))
+    except (ValidationError, ValueError) as exc:
+        detail = exc.errors() if isinstance(exc, ValidationError) else str(exc)
+        return JSONResponse(status_code=422, content={"detail": jsonable_encoder(detail)})
+    tenant_id = await resolve_tenant_scope_for_request(request, principal, filters.tenant_id)
+    filters = filters.model_copy(update={"tenant_id": tenant_id})
+    return await _service(request).coverage(filters)
 
 
 @router.get("/rules/{rule_id}", response_model=DetectionRule)
@@ -227,3 +250,13 @@ def _event_repository(request: Request) -> EventRepository:
 
 def _alert_repository(request: Request) -> DetectionAlertRepository:
     return cast(DetectionAlertRepository, request.app.state.detection_alert_repository)
+
+
+def _query_params(request: Request) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for key, value in request.query_params.multi_items():
+        if key in {"start_time", "end_time"}:
+            values[key] = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        else:
+            values[key] = value
+    return values

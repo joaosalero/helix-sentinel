@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Brain,
   Clock3,
+  Crosshair,
   FileText,
   GitBranch,
   type LucideIcon,
@@ -18,6 +19,8 @@ import type {
   ApiResult,
   DetectionAlert,
   DetectionAlertListResponse,
+  DetectionCoverageSummary,
+  DetectionRuleEfficacy,
   EventSearchResponse,
   NormalizedEvent,
   ReportingFinding,
@@ -28,6 +31,7 @@ import { cn } from "@/lib/utils";
 type SocDashboardProps = {
   report: ApiResult<SocReport>;
   alerts: ApiResult<DetectionAlertListResponse>;
+  coverage: ApiResult<DetectionCoverageSummary>;
   selectedAlert: ApiResult<DetectionAlert> | null;
   investigationEvents: ApiResult<EventSearchResponse> | null;
   tenantId?: string;
@@ -36,6 +40,7 @@ type SocDashboardProps = {
 export function SocDashboard({
   report,
   alerts,
+  coverage,
   selectedAlert,
   investigationEvents,
   tenantId,
@@ -60,6 +65,7 @@ export function SocDashboard({
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
           <section className="flex min-w-0 flex-col gap-5">
             <KpiGrid report={data} />
+            <DetectionCoveragePanel coverage={coverage} />
             <OperationalTables report={data} />
           </section>
           <aside className="flex min-w-0 flex-col gap-5">
@@ -207,6 +213,104 @@ function OperationalTables({ report }: { report: SocReport }) {
         </div>
       </Panel>
     </section>
+  );
+}
+
+function DetectionCoveragePanel({
+  coverage,
+}: {
+  coverage: ApiResult<DetectionCoverageSummary>;
+}) {
+  if (!coverage.data) {
+    return (
+      <Panel title="Detection Coverage">
+        <EmptyLine text={coverage.error ?? "Detection coverage data was not returned."} />
+      </Panel>
+    );
+  }
+
+  const data = coverage.data;
+  const topTechnique = data.top_techniques[0];
+
+  return (
+    <Panel title="Detection Coverage">
+      <div className="grid gap-3 md:grid-cols-4">
+        <KpiBlock label="Mapped rules" value={formatPercent(data.coverage_ratio)} />
+        <KpiBlock label="Techniques" value={formatNumber(data.techniques_covered)} />
+        <KpiBlock label="Alerting rules" value={formatNumber(data.alerting_rules)} />
+        <KpiBlock label="Silent active" value={formatNumber(data.silent_active_rules)} />
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Crosshair className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <p className="text-sm font-medium">ATT&CK activity</p>
+          </div>
+          {data.top_techniques.length === 0 ? (
+            <EmptyLine text="No ATT&CK mappings are available for coverage analysis." />
+          ) : (
+            data.top_techniques.map((technique) => (
+              <div key={technique.technique_id} className="rounded-md border border-border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium">{technique.technique_id}</span>
+                  <span className="text-sm text-muted-foreground">
+                    {formatNumber(technique.alert_count)} alerts
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {technique.name ?? humanize(technique.tactic ?? "unknown tactic")}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Detection efficacy</p>
+          <div className="rounded-md border border-border p-3">
+            <KeyValue
+              label="Top technique"
+              value={topTechnique ? topTechnique.technique_id : "None"}
+            />
+            <KeyValue
+              label="TP rate"
+              value={formatPercent(data.true_positive_rate)}
+            />
+            <KeyValue
+              label="FP rate"
+              value={formatPercent(data.false_positive_rate)}
+            />
+          </div>
+          {data.noisy_rules.length === 0 ? (
+            <EmptyLine text="No alerting rules in this reporting window." />
+          ) : (
+            data.noisy_rules.slice(0, 3).map((rule) => (
+              <RuleEfficacyRow key={rule.rule_id} rule={rule} />
+            ))
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function RuleEfficacyRow({ rule }: { rule: DetectionRuleEfficacy }) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{rule.title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {humanize(rule.category)} · {rule.attack_techniques.join(", ") || "Unmapped"}
+          </p>
+        </div>
+        <SeverityBadge severity={rule.severity} />
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {formatNumber(rule.alert_count)} alerts · {formatNumber(rule.open_alerts)} open
+      </p>
+    </div>
   );
 }
 

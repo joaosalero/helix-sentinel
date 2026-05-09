@@ -115,6 +115,60 @@ export type DetectionAlert = {
   updated_at: string;
 };
 
+export type AttackTechniqueCoverage = {
+  technique_id: string;
+  name: string | null;
+  tactic: string | null;
+  rule_count: number;
+  active_rule_count: number;
+  alert_count: number;
+  high_or_critical_alerts: number;
+};
+
+export type AttackTacticCoverage = {
+  tactic: string;
+  technique_count: number;
+  rule_count: number;
+  alert_count: number;
+};
+
+export type DetectionRuleEfficacy = {
+  rule_id: string;
+  title: string;
+  status: string;
+  severity: string;
+  category: string;
+  attack_techniques: string[];
+  alert_count: number;
+  high_or_critical_alerts: number;
+  open_alerts: number;
+  true_positive_alerts: number;
+  false_positive_alerts: number;
+  last_alert_time: string | null;
+};
+
+export type DetectionCoverageSummary = {
+  period_start: string;
+  period_end: string;
+  total_rules: number;
+  active_rules: number;
+  mapped_rules: number;
+  unmapped_rules: number;
+  active_mapped_rules: number;
+  techniques_covered: number;
+  tactics_covered: number;
+  coverage_ratio: number;
+  alerting_rules: number;
+  silent_active_rules: number;
+  total_alerts: number;
+  true_positive_rate: number | null;
+  false_positive_rate: number | null;
+  top_techniques: AttackTechniqueCoverage[];
+  tactic_coverage: AttackTacticCoverage[];
+  noisy_rules: DetectionRuleEfficacy[];
+  silent_rules: DetectionRuleEfficacy[];
+};
+
 export type NormalizedActor = {
   user_id?: string | null;
   username?: string | null;

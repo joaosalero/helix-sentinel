@@ -401,6 +401,47 @@ async def test_alert_queue_filters_by_investigation_context(
     assert payload["items"][0]["id"] == str(alert.id)
 
 
+async def test_detection_coverage_returns_attack_and_rule_efficacy(
+    detection_context: DetectionApiContext,
+) -> None:
+    await _import_rule(detection_context, SIGMA_RULE, status="active")
+    await _import_rule(detection_context, NETWORK_RULE, status="draft")
+    execution_rule = await _import_rule(detection_context, EXECUTION_RULE, status="active")
+    await detection_context.client.post(
+        f"/api/v1/detections/rules/{execution_rule['id']}/execute",
+        headers={"Authorization": f"Bearer {detection_context.engineer_token}"},
+        json={
+            "start_time": "2026-05-08T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "tenant_id": "tenant-a",
+        },
+    )
+
+    response = await detection_context.client.get(
+        "/api/v1/detections/coverage",
+        headers={"Authorization": f"Bearer {detection_context.analyst_token}"},
+        params={
+            "start_time": "2026-05-08T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "tenant_id": "tenant-a",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_rules"] == 3
+    assert payload["active_rules"] == 2
+    assert payload["mapped_rules"] == 2
+    assert payload["unmapped_rules"] == 1
+    assert payload["techniques_covered"] == 2
+    assert payload["total_alerts"] == 1
+    assert payload["alerting_rules"] == 1
+    assert payload["silent_active_rules"] == 1
+    assert payload["top_techniques"][0]["technique_id"] in {"T1059.001", "T1071.004"}
+    assert payload["noisy_rules"][0]["rule_id"] == execution_rule["id"]
+    assert payload["silent_rules"][0]["title"] == "Suspicious PowerShell Execution"
+
+
 async def test_analyst_can_acknowledge_and_close_alert(
     detection_context: DetectionApiContext,
 ) -> None:

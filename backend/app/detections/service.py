@@ -24,6 +24,8 @@ from app.detections.schemas import (
     DetectionAlertListResponse,
     DetectionAlertStatus,
     DetectionAlertWorkflowUpdateRequest,
+    DetectionCoverageFilters,
+    DetectionCoverageSummary,
     DetectionExecutionMatch,
     DetectionExecutionRequest,
     DetectionExecutionResponse,
@@ -126,6 +128,13 @@ class DetectionRuleService:
             limit=filters.limit,
             offset=filters.offset,
         )
+
+    async def coverage(self, filters: DetectionCoverageFilters) -> DetectionCoverageSummary:
+        """Return operational detection coverage and ATT&CK visibility."""
+        if self.alert_repository is None:
+            msg = "Detection coverage requires an alert repository"
+            raise RuntimeError(msg)
+        return await self.repository.coverage(filters, self.alert_repository)
 
     async def list_alerts(
         self,

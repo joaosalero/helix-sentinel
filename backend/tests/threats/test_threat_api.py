@@ -100,7 +100,7 @@ async def threat_context() -> AsyncIterator[ThreatApiContext]:
                 confidence=90,
                 confidence_factors=[],
                 matched_fields=["actor.ip_address"],
-                metadata={"tenant_id": "tenant-a"},
+                metadata={"tenant_id": "tenant-a", "matched_at": base},
             )
         ]
     )

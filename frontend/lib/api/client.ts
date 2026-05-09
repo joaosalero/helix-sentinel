@@ -3,6 +3,7 @@ import type {
   ApiResult,
   DetectionAlert,
   DetectionAlertListResponse,
+  DetectionCoverageSummary,
   EventSearchResponse,
   SocReport,
 } from "@/lib/api/types";
@@ -93,6 +94,15 @@ export function getOpenAlerts(query: {
     ...query,
     status: "open",
   });
+}
+
+export function getDetectionCoverage(query: {
+  start_time: string;
+  end_time: string;
+  tenant_id?: string;
+  limit?: number;
+}): Promise<ApiResult<DetectionCoverageSummary>> {
+  return requestJson<DetectionCoverageSummary>("/detections/coverage", query);
 }
 
 export function getAlert(

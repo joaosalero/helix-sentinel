@@ -75,6 +75,8 @@ class DetectionRuleListFilters(BaseModel):
     status: DetectionStatus | None = None
     severity: DetectionSeverity | None = None
     category: DetectionCategory | None = None
+    source: str | None = Field(default=None, min_length=1, max_length=160)
+    title: str | None = Field(default=None, min_length=2, max_length=120)
     tag: str | None = Field(default=None, min_length=1, max_length=120)
     attack_technique: str | None = Field(default=None, pattern=r"^T\d{4}(?:\.\d{3})?$")
     limit: int = Field(default=25, ge=1, le=100)
@@ -176,9 +178,29 @@ class DetectionAlertListFilters(BaseModel):
 
     status: DetectionAlertStatus | None = None
     severity: DetectionSeverity | None = None
+    category: DetectionCategory | None = None
+    source: str | None = Field(default=None, min_length=1, max_length=120)
+    rule_id: UUID | None = None
+    event_id: UUID | None = None
+    assigned_to: UUID | None = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
     tenant_id: str | None = Field(default=None, min_length=1, max_length=80)
     limit: int = Field(default=25, ge=1, le=100)
     offset: int = Field(default=0, ge=0, le=10_000)
+
+    @model_validator(mode="after")
+    def validate_event_time_range(self) -> "DetectionAlertListFilters":
+        """Reject inverted or excessive alert event-time windows."""
+        if self.start_time is None or self.end_time is None:
+            return self
+        if self.end_time <= self.start_time:
+            msg = "end_time must be after start_time"
+            raise ValueError(msg)
+        if self.end_time - self.start_time > timedelta(days=90):
+            msg = "alert search window must not exceed 90 days"
+            raise ValueError(msg)
+        return self
 
 
 class DetectionAlertListResponse(BaseModel):

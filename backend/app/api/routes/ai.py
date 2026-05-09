@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.ai.metrics import ai_analytics_requests_total
-from app.ai.repositories import InMemoryAIEventRepository
+from app.ai.repositories import InMemoryAIEventRepository, RepositoryBackedAIEventRepository
 from app.ai.schemas import (
     AIAnalyticsFilter,
     AIAnalyticsSummary,
@@ -76,12 +76,13 @@ async def _prepare_request(
     return filters, AIAnalyticsService(await _repository(request))
 
 
-async def _repository(request: Request) -> InMemoryAIEventRepository:
+async def _repository(
+    request: Request,
+) -> InMemoryAIEventRepository | RepositoryBackedAIEventRepository:
     event_repository = request.app.state.event_repository
     if isinstance(event_repository, InMemoryEventRepository):
         return InMemoryAIEventRepository(event_repository.normalized_events)
-    events = await event_repository.list_normalized_events()
-    return InMemoryAIEventRepository(events)
+    return RepositoryBackedAIEventRepository(event_repository)
 
 
 def _query_params(request: Request) -> dict[str, Any]:

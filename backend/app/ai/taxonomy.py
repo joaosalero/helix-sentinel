@@ -9,6 +9,8 @@ class AnomalyType(StrEnum):
     FREQUENCY = "frequency"
     SEVERITY = "severity"
     EVENT_BURST = "event_burst"
+    ENTITY_CONCENTRATION = "entity_concentration"
+    LOW_AND_SLOW = "low_and_slow"
     SUSPICIOUS_CLASSIFICATION = "suspicious_classification"
 
 
@@ -28,4 +30,3 @@ class ConfidenceLevel(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
-

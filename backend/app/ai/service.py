@@ -1,7 +1,8 @@
 """AI-assisted deterministic security analytics service."""
 
 import logging
-from collections import defaultdict
+from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
@@ -21,9 +22,20 @@ from app.ai.schemas import (
 from app.ai.scoring import SEVERITY_WEIGHT, confidence, score_from_factors, z_score
 from app.ai.taxonomy import AnomalyType, ClassificationLabel
 from app.events.schemas import NormalizedEvent
-from app.events.taxonomy import EventSeverity
+from app.events.taxonomy import EventCategory, EventSeverity
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class AnalyticsContext:
+    """Deterministic peer context for one bounded scoring window."""
+
+    actor_counts: Counter[str]
+    asset_counts: Counter[str]
+    source_category_counts: Counter[tuple[str, str]]
+    high_severity_by_source: Counter[str]
+    total_by_source: Counter[str]
 
 
 class AIAnalyticsService:
@@ -63,7 +75,8 @@ class AIAnalyticsService:
     async def enrichments(self, filters: AIAnalyticsFilter) -> EnrichmentListResponse:
         """Return deterministic NLP/classification enrichment for events."""
         events = await self.repository.list_events(filters)
-        enrichments = [_enrich_event(event) for event in events]
+        context = _analytics_context(events)
+        enrichments = [_enrich_event(event, context) for event in events]
         filtered = [
             enrichment
             for enrichment in enrichments
@@ -82,7 +95,10 @@ class AIAnalyticsService:
 
     async def summary(self, filters: AIAnalyticsFilter) -> AIAnalyticsSummary:
         """Return dashboard-ready AI analytics summary."""
-        anomaly_response = await self.anomalies(filters, correlation_id=None)
+        anomaly_response = await self.anomalies(
+            filters.model_copy(update={"limit": 100, "offset": 0}),
+            correlation_id=None,
+        )
         enrichment_response = await self.enrichments(
             filters.model_copy(update={"limit": 100, "offset": 0})
         )
@@ -107,6 +123,8 @@ class AIAnalyticsService:
             *self._frequency_anomalies(events),
             *self._severity_anomalies(events),
             *self._event_bursts(events),
+            *self._entity_concentration_anomalies(events),
+            *self._low_and_slow_anomalies(events),
             *self._classification_anomalies(events),
         ]
         findings.sort(key=lambda item: (item.score, item.last_seen), reverse=True)
@@ -210,9 +228,13 @@ class AIAnalyticsService:
 
     def _classification_anomalies(self, events: list[NormalizedEvent]) -> list[AnomalyFinding]:
         findings: list[AnomalyFinding] = []
+        context = _analytics_context(events)
         for event in events:
-            enrichment = _enrich_event(event)
-            if enrichment.score < 35:
+            enrichment = _enrich_event(event, context)
+            if (
+                enrichment.score < 35
+                or ClassificationLabel.BENIGN_OR_UNKNOWN in enrichment.classifications
+            ):
                 continue
             findings.append(
                 _finding(
@@ -230,8 +252,132 @@ class AIAnalyticsService:
             )
         return findings
 
+    def _entity_concentration_anomalies(
+        self,
+        events: list[NormalizedEvent],
+    ) -> list[AnomalyFinding]:
+        findings: list[AnomalyFinding] = []
+        for entity_type, grouped in (
+            ("actor", _group_by_actor(events)),
+            ("asset", _group_by_asset(events)),
+        ):
+            for entity, related in grouped.items():
+                if len(related) < 3:
+                    continue
+                category_count = len({event.category for event in related})
+                source_count = len({event.source_name for event in related})
+                high_count = _high_or_critical_count(related)
+                factors = [
+                    ExplainabilityFactor(
+                        name=f"{entity_type}_event_concentration",
+                        points=min(20 + len(related) * 5, 45),
+                        reason="Multiple events concentrate around one investigation entity.",
+                        metadata={
+                            "entity_type": entity_type,
+                            "event_count": len(related),
+                        },
+                    )
+                ]
+                if category_count >= 2:
+                    factors.append(
+                        ExplainabilityFactor(
+                            name="multi_category_context",
+                            points=15,
+                            reason="The entity appears across multiple event categories.",
+                            metadata={"category_count": category_count},
+                        )
+                    )
+                if source_count >= 2:
+                    factors.append(
+                        ExplainabilityFactor(
+                            name="multi_source_context",
+                            points=10,
+                            reason="The entity appears across multiple telemetry sources.",
+                            metadata={"source_count": source_count},
+                        )
+                    )
+                if high_count:
+                    factors.append(
+                        ExplainabilityFactor(
+                            name="entity_severity_context",
+                            points=min(high_count * 8, 25),
+                            reason="The entity has high or critical severity activity.",
+                            metadata={"high_or_critical": high_count},
+                        )
+                    )
+                findings.append(
+                    _finding(
+                        AnomalyType.ENTITY_CONCENTRATION,
+                        "Entity concentration anomaly",
+                        f"Repeated security activity concentrates around {entity_type} {entity}.",
+                        related,
+                        factors,
+                        metadata={"entity_type": entity_type, "entity": entity},
+                    )
+                )
+        return findings
 
-def _enrich_event(event: NormalizedEvent) -> AIEnrichment:
+    def _low_and_slow_anomalies(self, events: list[NormalizedEvent]) -> list[AnomalyFinding]:
+        findings: list[AnomalyFinding] = []
+        for key, grouped in (
+            ("actor", _group_by_actor(events)),
+            ("asset", _group_by_asset(events)),
+        ):
+            for entity, related in grouped.items():
+                window_minutes = _window_minutes(related)
+                if len(related) < 3 or window_minutes <= 60:
+                    continue
+                suspicious_count = sum(_looks_suspicious(event) for event in related)
+                high_count = _high_or_critical_count(related)
+                if suspicious_count < 2 and high_count == 0:
+                    continue
+                factors = [
+                    ExplainabilityFactor(
+                        name="extended_temporal_pattern",
+                        points=min(20 + len(related) * 4, 45),
+                        reason="Related activity spans a longer investigation window.",
+                        metadata={
+                            "entity_type": key,
+                            "event_count": len(related),
+                            "window_minutes": window_minutes,
+                        },
+                    )
+                ]
+                if suspicious_count:
+                    factors.append(
+                        ExplainabilityFactor(
+                            name="repeated_suspicious_terms",
+                            points=min(suspicious_count * 8, 25),
+                            reason="Suspicious deterministic terms recur across the sequence.",
+                            metadata={"suspicious_event_count": suspicious_count},
+                        )
+                    )
+                if high_count:
+                    factors.append(
+                        ExplainabilityFactor(
+                            name="low_and_slow_severity",
+                            points=min(high_count * 10, 25),
+                            reason="The longer sequence includes high-severity events.",
+                            metadata={"high_or_critical": high_count},
+                        )
+                    )
+                findings.append(
+                    _finding(
+                        AnomalyType.LOW_AND_SLOW,
+                        "Low-and-slow activity anomaly",
+                        f"Extended suspicious activity observed for {key} {entity}.",
+                        related,
+                        factors,
+                        metadata={"entity_type": key, "entity": entity},
+                    )
+                )
+        return findings
+
+
+def _enrich_event(
+    event: NormalizedEvent,
+    context: AnalyticsContext | None = None,
+) -> AIEnrichment:
     keywords = extract_keywords(event)
     terms = suspicious_terms(keywords)
     labels, factors = classify_event(event, keywords)
@@ -244,6 +390,7 @@ def _enrich_event(event: NormalizedEvent) -> AIEnrichment:
                 metadata={"terms": terms},
             )
         )
+    factors.extend(_operational_context_factors(event, context))
     score = score_from_factors(factors)
     return AIEnrichment(
         event_id=event.id,
@@ -302,3 +449,169 @@ def _window_minutes(events: list[NormalizedEvent]) -> int:
     first_seen = min(event.event_time for event in events)
     last_seen = max(event.event_time for event in events)
     return int((last_seen - first_seen).total_seconds() // 60)
+
+
+def _analytics_context(events: list[NormalizedEvent]) -> AnalyticsContext:
+    actor_counts: Counter[str] = Counter()
+    asset_counts: Counter[str] = Counter()
+    source_category_counts: Counter[tuple[str, str]] = Counter()
+    high_severity_by_source: Counter[str] = Counter()
+    total_by_source: Counter[str] = Counter()
+    for event in events:
+        if actor := _actor_key(event):
+            actor_counts[actor] += 1
+        if asset := _asset_key(event):
+            asset_counts[asset] += 1
+        source_category_counts[(event.source_name, event.category.value)] += 1
+        total_by_source[event.source_name] += 1
+        if event.severity in {EventSeverity.HIGH, EventSeverity.CRITICAL}:
+            high_severity_by_source[event.source_name] += 1
+    return AnalyticsContext(
+        actor_counts=actor_counts,
+        asset_counts=asset_counts,
+        source_category_counts=source_category_counts,
+        high_severity_by_source=high_severity_by_source,
+        total_by_source=total_by_source,
+    )
+
+
+def _operational_context_factors(
+    event: NormalizedEvent,
+    context: AnalyticsContext | None,
+) -> list[ExplainabilityFactor]:
+    factors: list[ExplainabilityFactor] = []
+    severity_points = {
+        EventSeverity.MEDIUM: 8,
+        EventSeverity.HIGH: 15,
+        EventSeverity.CRITICAL: 25,
+    }.get(event.severity, 0)
+    if severity_points:
+        factors.append(
+            ExplainabilityFactor(
+                name="event_severity_context",
+                points=severity_points,
+                reason="Event severity increases analyst triage relevance.",
+                metadata={"severity": event.severity.value},
+            )
+        )
+    if event.category == EventCategory.AUTHENTICATION and _looks_like_failure(event.title):
+        factors.append(
+            ExplainabilityFactor(
+                name="authentication_failure_context",
+                points=12,
+                reason="Authentication failure language is present in the event title.",
+            )
+        )
+    if event.ioc and event.severity in {EventSeverity.HIGH, EventSeverity.CRITICAL}:
+        factors.append(
+            ExplainabilityFactor(
+                name="ioc_severity_context",
+                points=15,
+                reason="IOC metadata appears on a high-severity event.",
+            )
+        )
+    if context is None:
+        return factors
+    source_category_count = context.source_category_counts[
+        (event.source_name, event.category.value)
+    ]
+    if source_category_count >= 5:
+        factors.append(
+            ExplainabilityFactor(
+                name="source_category_volume_context",
+                points=10,
+                reason="The event belongs to an elevated source/category group.",
+                metadata={"source_category_event_count": source_category_count},
+            )
+        )
+    if actor := _actor_key(event):
+        count = context.actor_counts[actor]
+        if count >= 3:
+            factors.append(
+                ExplainabilityFactor(
+                    name="actor_repetition_context",
+                    points=min(10 + count * 3, 25),
+                    reason="The actor appears repeatedly in the scoring window.",
+                    metadata={"actor_event_count": count},
+                )
+            )
+    if asset := _asset_key(event):
+        count = context.asset_counts[asset]
+        if count >= 3:
+            factors.append(
+                ExplainabilityFactor(
+                    name="asset_repetition_context",
+                    points=min(10 + count * 3, 25),
+                    reason="The asset appears repeatedly in the scoring window.",
+                    metadata={"asset_event_count": count},
+                )
+            )
+    source_total = context.total_by_source[event.source_name]
+    if source_total >= 3:
+        high_ratio = context.high_severity_by_source[event.source_name] / source_total
+        if high_ratio >= 0.5:
+            factors.append(
+                ExplainabilityFactor(
+                    name="source_severity_ratio_context",
+                    points=12,
+                    reason="This source has a high concentration of severe events.",
+                    metadata={"high_severity_ratio": round(high_ratio, 4)},
+                )
+            )
+    return factors
+
+
+def _group_by_actor(events: list[NormalizedEvent]) -> dict[str, list[NormalizedEvent]]:
+    grouped: dict[str, list[NormalizedEvent]] = defaultdict(list)
+    for event in events:
+        if key := _actor_key(event):
+            grouped[key].append(event)
+    return grouped
+
+
+def _group_by_asset(events: list[NormalizedEvent]) -> dict[str, list[NormalizedEvent]]:
+    grouped: dict[str, list[NormalizedEvent]] = defaultdict(list)
+    for event in events:
+        if key := _asset_key(event):
+            grouped[key].append(event)
+    return grouped
+
+
+def _actor_key(event: NormalizedEvent) -> str | None:
+    return (
+        event.actor.email
+        or event.actor.username
+        or event.actor.user_id
+        or event.actor.ip_address
+    )
+
+
+def _asset_key(event: NormalizedEvent) -> str | None:
+    return event.asset.hostname or event.asset.asset_id or event.asset.ip_address
+
+
+def _high_or_critical_count(events: list[NormalizedEvent]) -> int:
+    return sum(event.severity in {EventSeverity.HIGH, EventSeverity.CRITICAL} for event in events)
+
+
+def _looks_suspicious(event: NormalizedEvent) -> bool:
+    value = event.title.lower()
+    return any(
+        term in value
+        for term in (
+            "blocked",
+            "credential",
+            "denied",
+            "encoded",
+            "fail",
+            "malware",
+            "phishing",
+            "powershell",
+            "suspicious",
+        )
+    )
+
+
+def _looks_like_failure(title: str) -> bool:
+    value = title.lower()
+    return any(term in value for term in ("fail", "denied", "invalid", "locked"))

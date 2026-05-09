@@ -5,6 +5,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.events.schemas import NormalizedEvent
 from app.events.taxonomy import EventCategory, EventSeverity
 
 
@@ -40,6 +41,49 @@ class AnalyticsFilter(BaseModel):
             msg = "time range must not exceed 366 days"
             raise ValueError(msg)
         return self
+
+
+class EventSearchFilters(BaseModel):
+    """Validated normalized event retrieval filters for investigations."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_time: datetime = Field(default_factory=lambda: datetime.now(UTC) - timedelta(days=7))
+    end_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    tenant_id: str | None = Field(default=None, min_length=1, max_length=80)
+    source: str | None = Field(default=None, min_length=1, max_length=120)
+    source_product: str | None = Field(default=None, min_length=1, max_length=120)
+    source_vendor: str | None = Field(default=None, min_length=1, max_length=120)
+    category: EventCategory | None = None
+    severity: EventSeverity | None = None
+    title: str | None = Field(default=None, min_length=2, max_length=120)
+    actor_username: str | None = Field(default=None, min_length=1, max_length=160)
+    actor_email: str | None = Field(default=None, min_length=3, max_length=320)
+    actor_ip: str | None = Field(default=None, min_length=3, max_length=80)
+    asset_hostname: str | None = Field(default=None, min_length=1, max_length=160)
+    asset_ip: str | None = Field(default=None, min_length=3, max_length=80)
+    ioc_value: str | None = Field(default=None, min_length=3, max_length=320)
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0, le=10_000)
+
+    @model_validator(mode="after")
+    def validate_search_window(self) -> "EventSearchFilters":
+        """Keep analyst event retrieval bounded and operationally predictable."""
+        if self.end_time <= self.start_time:
+            msg = "end_time must be after start_time"
+            raise ValueError(msg)
+        if self.end_time - self.start_time > timedelta(days=90):
+            msg = "event search window must not exceed 90 days"
+            raise ValueError(msg)
+        return self
+
+
+class EventSearchResponse(BaseModel):
+    """Paginated normalized event search response."""
+
+    items: list[NormalizedEvent]
+    limit: int
+    offset: int
 
 
 class CountSummary(BaseModel):
@@ -94,4 +138,3 @@ class SocOverview(BaseModel):
     authentication_failures: list[TrendPoint]
     top_sources: list[SourceMetric]
     kpis: OperationalKpis
-

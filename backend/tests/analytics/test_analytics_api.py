@@ -17,7 +17,7 @@ from app.auth.rbac import permissions_for_roles
 from app.core.config.settings import SecuritySettings
 from app.core.security.passwords import hash_password
 from app.events.repositories import InMemoryEventRepository, PostgresEventRepository
-from app.events.schemas import NormalizedEvent
+from app.events.schemas import NormalizedActor, NormalizedAsset, NormalizedEvent
 from app.events.taxonomy import EventCategory, EventSeverity
 from app.users.models import UserStatus
 from app.users.repositories import InMemoryUserRepository
@@ -99,6 +99,42 @@ async def analytics_context() -> AsyncIterator[AnalyticsApiContext]:
             ),
         ]
     )
+    event_repository.normalized_events.append(
+        NormalizedEvent(
+            id=uuid4(),
+            raw_event_id=uuid4(),
+            tenant_id="tenant-a",
+            source_name="edr",
+            source_product="endpoint",
+            source_vendor="Acme",
+            category=EventCategory.ENDPOINT,
+            severity=EventSeverity.HIGH,
+            event_time=base + timedelta(hours=1),
+            ingested_at=base + timedelta(hours=1),
+            title="powershell process",
+            actor=NormalizedActor(username="alice", ip_address="10.0.0.9"),
+            asset=NormalizedAsset(hostname="workstation-7"),
+            ioc={"indicator": "bad.example"},
+        )
+    )
+    event_repository.normalized_events.append(
+        NormalizedEvent(
+            id=uuid4(),
+            raw_event_id=uuid4(),
+            tenant_id="tenant-b",
+            source_name="edr",
+            source_product="endpoint",
+            source_vendor="Acme",
+            category=EventCategory.ENDPOINT,
+            severity=EventSeverity.HIGH,
+            event_time=base + timedelta(hours=1),
+            ingested_at=base + timedelta(hours=1),
+            title="powershell process",
+            actor=NormalizedActor(username="alice", ip_address="10.0.0.9"),
+            asset=NormalizedAsset(hostname="blocked-host"),
+            ioc={"indicator": "bad.example"},
+        )
+    )
     app = create_security_app()
     app.state.event_repository = event_repository
     app.state.user_repository = InMemoryUserRepository([analyst, denied])
@@ -157,8 +193,8 @@ async def test_overview_endpoint_returns_dashboard_ready_metrics(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["total_events"] == 3
-    assert body["kpis"]["high_severity_ratio"] == 0.6667
+    assert body["total_events"] == 4
+    assert body["kpis"]["high_severity_ratio"] == 0.75
     assert len(body["top_sources"]) == 3
 
 
@@ -176,7 +212,7 @@ async def test_severity_endpoint_supports_date_filtering(
 
     assert response.status_code == 200
     counts = {item["name"]: item["count"] for item in response.json()}
-    assert counts["high"] == 1
+    assert counts["high"] == 2
     assert counts["critical"] == 1
     assert counts["medium"] == 0
 
@@ -196,6 +232,49 @@ async def test_sources_endpoint_supports_pagination(
 
     assert response.status_code == 200
     assert len(response.json()) == 1
+
+
+async def test_event_search_supports_investigation_filters(
+    analytics_context: AnalyticsApiContext,
+) -> None:
+    response = await analytics_context.client.get(
+        "/api/v1/analytics/events",
+        params={
+            "start_time": "2026-05-06T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "source_product": "endpoint",
+            "title": "powershell",
+            "actor_username": "alice",
+            "ioc_value": "bad.example",
+        },
+        headers={"Authorization": f"Bearer {analytics_context.analyst_token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["limit"] == 50
+    assert len(body["items"]) == 1
+    assert body["items"][0]["tenant_id"] == "tenant-a"
+    assert body["items"][0]["actor"]["username"] == "alice"
+
+
+async def test_event_search_uses_principal_tenant_by_default(
+    analytics_context: AnalyticsApiContext,
+) -> None:
+    response = await analytics_context.client.get(
+        "/api/v1/analytics/events",
+        params={
+            "start_time": "2026-05-06T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "source": "okta",
+        },
+        headers={"Authorization": f"Bearer {analytics_context.analyst_token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["items"]) == 1
+    assert body["items"][0]["tenant_id"] == "tenant-a"
 
 
 async def test_invalid_time_range_is_rejected(analytics_context: AnalyticsApiContext) -> None:

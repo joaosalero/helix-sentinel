@@ -1,16 +1,20 @@
 """Event repository adapter tests."""
 
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.events.normalizer import EventNormalizer
 from app.events.repositories import (
+    InMemoryEventRepository,
+    NormalizedEventQuery,
     PostgresEventRepository,
     _raw_record_from_request,
     _to_normalized_model,
     _to_normalized_schema,
     _to_raw_model,
 )
-from app.events.schemas import EventIngestRequest
+from app.events.schemas import EventIngestRequest, NormalizedActor, NormalizedAsset, NormalizedEvent
+from app.events.taxonomy import EventCategory, EventSeverity
 from helix_sentinel.core.config import Settings
 from helix_sentinel.main import create_app
 
@@ -73,3 +77,50 @@ def test_event_repository_round_trips_normalized_event_shape() -> None:
     assert restored.severity == normalized.severity
     assert restored.network["source_ip"] == "10.0.0.5"
     assert restored.normalization_version == normalized.normalization_version
+
+
+async def test_in_memory_event_repository_supports_investigation_filters() -> None:
+    repository = InMemoryEventRepository()
+    event_time = datetime(2026, 5, 8, 12, tzinfo=UTC)
+    first = NormalizedEvent(
+        id=uuid4(),
+        raw_event_id=uuid4(),
+        tenant_id="tenant-a",
+        source_name="edr",
+        source_product="endpoint",
+        source_vendor="Acme",
+        category=EventCategory.ENDPOINT,
+        severity=EventSeverity.HIGH,
+        event_time=event_time,
+        ingested_at=event_time,
+        title="powershell suspicious process",
+        actor=NormalizedActor(username="alice", ip_address="10.0.0.9"),
+        asset=NormalizedAsset(hostname="workstation-7"),
+        ioc={"indicator": "bad.example"},
+    )
+    second = first.model_copy(
+        update={
+            "id": uuid4(),
+            "raw_event_id": uuid4(),
+            "title": "benign process",
+            "actor": NormalizedActor(username="bob", ip_address="10.0.0.10"),
+            "ioc": {},
+        }
+    )
+    repository.normalized_events.extend([first, second])
+
+    results = await repository.list_normalized_events(
+        NormalizedEventQuery(
+            tenant_id="tenant-a",
+            source_product="endpoint",
+            title="powershell",
+            actor_username="alice",
+            actor_ip="10.0.0.9",
+            asset_hostname="workstation-7",
+            ioc_value="bad.example",
+            limit=10,
+            newest_first=True,
+        )
+    )
+
+    assert [event.id for event in results] == [first.id]

@@ -9,6 +9,7 @@ The initial implementation supports:
 - Frequency anomaly scoring.
 - Severity concentration scoring.
 - Short-window event burst detection.
+- Entity concentration and low-and-slow activity detection.
 - Suspicious event classification.
 - Keyword extraction and suspicious term detection.
 - IOC-aware enrichment metadata.
@@ -17,13 +18,13 @@ All outputs include explainability factors with point values, rationale, and rel
 
 ## Scoring Philosophy
 
-Scoring is additive, deterministic, and capped at 100. Factors include frequency deviation, severity concentration, short-window bursts, IOC metadata, URL/domain terms, email/phishing terms, process terms, and suspicious keywords. Confidence bands are derived from score and factor count.
+Scoring is additive, deterministic, and capped at 100. Factors include frequency deviation, severity concentration, short-window bursts, entity repetition, multi-source/category context, extended temporal patterns, IOC metadata, URL/domain terms, email/phishing terms, process terms, severity context, and suspicious keywords. Confidence bands are derived from score and factor count.
 
 This makes the system suitable for SOC triage preparation without introducing opaque black-box behavior.
 
 ## NLP Enrichment
 
-NLP support is deliberately lightweight. The service extracts stable lowercase tokens from normalized titles, sources, categories, network metadata, and IOC metadata. Suspicious terms are matched from a small security vocabulary. No external NLP models or providers are used.
+NLP support is deliberately lightweight. The service extracts stable lowercase tokens from normalized titles, source metadata, categories, actor and asset metadata, network metadata, and IOC metadata. Suspicious terms are matched from a small security vocabulary. No external NLP models or providers are used.
 
 ## APIs
 
@@ -37,9 +38,8 @@ Filters include time range, tenant, event category, anomaly type, classification
 
 ## Persistence Strategy
 
-The database migration prepares anomaly and enrichment metadata tables for future historical retrieval. Current APIs compute results on demand from normalized events, which avoids premature background orchestration.
+The database migration prepares anomaly and enrichment metadata tables for future historical retrieval. Current APIs compute results on demand from bounded repository-backed normalized event windows, which avoids premature background orchestration.
 
 ## Observability
 
 The layer emits API usage counters, anomaly counters by type, and scoring latency histograms. Logs include correlation IDs and aggregate counts only; raw payloads and sensitive metadata are not logged.
-

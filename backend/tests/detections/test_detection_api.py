@@ -259,6 +259,24 @@ async def test_rule_listing_filters_by_severity_tag_and_attack(
     assert body["items"][0]["title"] == "Suspicious PowerShell Execution"
 
 
+async def test_rule_listing_filters_by_title_and_source(
+    detection_context: DetectionApiContext,
+) -> None:
+    await _import_rule(detection_context, SIGMA_RULE)
+    await _import_rule(detection_context, NETWORK_RULE)
+
+    response = await detection_context.client.get(
+        "/api/v1/detections/rules",
+        headers={"Authorization": f"Bearer {detection_context.engineer_token}"},
+        params={"title": "powershell", "source": "windows:process_creation"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["title"] == "Suspicious PowerShell Execution"
+
+
 async def test_rule_listing_paginates(detection_context: DetectionApiContext) -> None:
     await _import_rule(detection_context, SIGMA_RULE)
     await _import_rule(detection_context, NETWORK_RULE)
@@ -347,6 +365,40 @@ async def test_alert_queue_lists_tenant_scoped_persisted_alerts(
     assert payload["total"] == 1
     assert payload["items"][0]["tenant_id"] == "tenant-a"
     assert payload["items"][0]["status"] == "open"
+
+
+async def test_alert_queue_filters_by_investigation_context(
+    detection_context: DetectionApiContext,
+) -> None:
+    body = await _import_rule(detection_context, EXECUTION_RULE, status="active")
+    await detection_context.client.post(
+        f"/api/v1/detections/rules/{body['id']}/execute",
+        headers={"Authorization": f"Bearer {detection_context.engineer_token}"},
+        json={
+            "start_time": "2026-05-08T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+            "tenant_id": "tenant-a",
+        },
+    )
+    alert = detection_context.alert_repository.alerts[0]
+
+    response = await detection_context.client.get(
+        "/api/v1/detections/alerts",
+        headers={"Authorization": f"Bearer {detection_context.analyst_token}"},
+        params={
+            "category": "endpoint",
+            "source": "edr",
+            "rule_id": str(alert.rule_id),
+            "event_id": str(alert.event_id),
+            "start_time": "2026-05-08T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["id"] == str(alert.id)
 
 
 async def test_analyst_can_acknowledge_and_close_alert(

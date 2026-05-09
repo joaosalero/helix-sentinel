@@ -3,16 +3,20 @@
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import uuid4
 
 import pytest
+from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 
+from app.ai.repositories import RepositoryBackedAIEventRepository
 from app.api.app import create_security_app
+from app.api.routes.ai import _repository
 from app.auth.rbac import permissions_for_roles
 from app.core.config.settings import SecuritySettings
 from app.core.security.passwords import hash_password
-from app.events.repositories import InMemoryEventRepository
+from app.events.repositories import InMemoryEventRepository, PostgresEventRepository
 from app.events.schemas import NormalizedEvent
 from app.events.taxonomy import EventCategory, EventSeverity
 from app.users.models import UserStatus
@@ -173,3 +177,18 @@ async def test_cross_tenant_ai_filter_is_rejected(ai_context: AIApiContext) -> N
     )
 
     assert response.status_code == 403
+
+
+async def test_postgres_event_repository_uses_repository_backed_ai_adapter() -> None:
+    app = create_security_app()
+    app.state.event_repository = PostgresEventRepository(app.state.db_session_factory)
+    request = _RequestStub(app)
+
+    repository = await _repository(cast(Request, request))
+
+    assert isinstance(repository, RepositoryBackedAIEventRepository)
+
+
+@dataclass
+class _RequestStub:
+    app: object

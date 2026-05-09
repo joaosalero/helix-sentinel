@@ -25,10 +25,11 @@ Analytics endpoints live under `/api/v1/analytics` and require `analytics:read`.
 - `/categories`: category count and percentage summary.
 - `/trends`: event volume by hour or day.
 - `/sources`: paginated source metrics.
+- `/events`: bounded normalized event retrieval for analyst investigations.
 
 ## Filtering
 
-Filters are validated through a dedicated schema. Supported filters are time range, tenant, source, category, severity, trend bucket, limit, and offset. Time ranges are capped at 366 days to keep queries operationally predictable.
+Filters are validated through dedicated schemas. Aggregation filters support time range, tenant, source, category, severity, trend bucket, limit, and offset. Normalized event retrieval adds source product/vendor, title contains, actor username/email/IP, asset hostname/IP, and IOC value filters. Aggregation time ranges are capped at 366 days; event search is capped at 90 days and returns newest events first.
 
 ## KPI Rationale
 
@@ -43,7 +44,7 @@ Database-backed analytics uses SQL aggregation over normalized event records for
 - severity and event time
 - source and event time
 
-JSONB fields remain available for targeted actor, asset, and enrichment filtering, but the first analytics APIs intentionally avoid expensive payload-level aggregations.
+JSONB fields are used only for targeted actor, asset, and IOC filters on bounded event retrieval. Aggregation APIs still avoid payload-level aggregation and operate on normalized scalar columns first.
 
 ## Observability
 

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.events.models import NormalizedSecurityEvent, RawSecurityEvent
@@ -21,9 +21,20 @@ class NormalizedEventQuery:
     end_time: datetime | None = None
     tenant_id: str | None = None
     source: str | None = None
+    source_product: str | None = None
+    source_vendor: str | None = None
     category: EventCategory | None = None
     severity: EventSeverity | None = None
+    title: str | None = None
+    actor_username: str | None = None
+    actor_email: str | None = None
+    actor_ip: str | None = None
+    asset_hostname: str | None = None
+    asset_ip: str | None = None
+    ioc_value: str | None = None
     limit: int | None = None
+    offset: int = 0
+    newest_first: bool = False
 
 
 @dataclass(frozen=True)
@@ -98,11 +109,22 @@ class InMemoryEventRepository(EventRepository):
             and (query.end_time is None or event.event_time <= query.end_time)
             and (query.tenant_id is None or event.tenant_id == query.tenant_id)
             and (query.source is None or event.source_name == query.source)
+            and (query.source_product is None or event.source_product == query.source_product)
+            and (query.source_vendor is None or event.source_vendor == query.source_vendor)
             and (query.category is None or event.category == query.category)
             and (query.severity is None or event.severity == query.severity)
+            and _matches_text(event.title, query.title)
+            and _matches_text(event.actor.username, query.actor_username, exact=True)
+            and _matches_text(event.actor.email, query.actor_email, exact=True)
+            and _matches_text(event.actor.ip_address, query.actor_ip, exact=True)
+            and _matches_text(event.asset.hostname, query.asset_hostname, exact=True)
+            and _matches_text(event.asset.ip_address, query.asset_ip, exact=True)
+            and _event_contains_ioc(event, query.ioc_value)
         ]
-        filtered.sort(key=lambda event: event.event_time)
-        return filtered[: query.limit] if query.limit is not None else filtered
+        filtered.sort(key=lambda event: event.event_time, reverse=query.newest_first)
+        if query.limit is None:
+            return filtered[query.offset :]
+        return filtered[query.offset : query.offset + query.limit]
 
 
 class PostgresEventRepository(EventRepository):
@@ -134,8 +156,13 @@ class PostgresEventRepository(EventRepository):
             statement = select(NormalizedSecurityEvent)
             if query is not None:
                 statement = _apply_normalized_query(statement, query)
+            order_by = (
+                NormalizedSecurityEvent.event_time.desc()
+                if query is not None and query.newest_first
+                else NormalizedSecurityEvent.event_time
+            )
             records = await session.scalars(
-                statement.order_by(NormalizedSecurityEvent.event_time)
+                statement.order_by(order_by)
             )
             return [_to_normalized_schema(record) for record in records.all()]
 
@@ -231,10 +258,66 @@ def _apply_normalized_query(
         statement = statement.where(NormalizedSecurityEvent.tenant_id == query.tenant_id)
     if query.source is not None:
         statement = statement.where(NormalizedSecurityEvent.source_name == query.source)
+    if query.source_product is not None:
+        statement = statement.where(NormalizedSecurityEvent.source_product == query.source_product)
+    if query.source_vendor is not None:
+        statement = statement.where(NormalizedSecurityEvent.source_vendor == query.source_vendor)
     if query.category is not None:
         statement = statement.where(NormalizedSecurityEvent.category == query.category.value)
     if query.severity is not None:
         statement = statement.where(NormalizedSecurityEvent.severity == query.severity.value)
+    if query.title is not None:
+        statement = statement.where(
+            NormalizedSecurityEvent.title.ilike(f"%{_escape_like(query.title)}%", escape="\\")
+        )
+    if query.actor_username is not None:
+        statement = statement.where(
+            NormalizedSecurityEvent.actor.contains({"username": query.actor_username})
+        )
+    if query.actor_email is not None:
+        statement = statement.where(
+            NormalizedSecurityEvent.actor.contains({"email": query.actor_email})
+        )
+    if query.actor_ip is not None:
+        statement = statement.where(
+            NormalizedSecurityEvent.actor.contains({"ip_address": query.actor_ip})
+        )
+    if query.asset_hostname is not None:
+        statement = statement.where(
+            NormalizedSecurityEvent.asset.contains({"hostname": query.asset_hostname})
+        )
+    if query.asset_ip is not None:
+        statement = statement.where(
+            NormalizedSecurityEvent.asset.contains({"ip_address": query.asset_ip})
+        )
+    if query.ioc_value is not None:
+        ioc_pattern = f"%{_escape_like(query.ioc_value)}%"
+        statement = statement.where(
+            cast(NormalizedSecurityEvent.ioc, String).ilike(ioc_pattern, escape="\\")
+        )
+    if query.offset:
+        statement = statement.offset(query.offset)
     if query.limit is not None:
         statement = statement.limit(query.limit)
     return statement
+
+
+def _matches_text(value: str | None, expected: str | None, *, exact: bool = False) -> bool:
+    if expected is None:
+        return True
+    if value is None:
+        return False
+    if exact:
+        return value.lower() == expected.lower()
+    return expected.lower() in value.lower()
+
+
+def _event_contains_ioc(event: NormalizedEvent, expected: str | None) -> bool:
+    if expected is None:
+        return True
+    needle = expected.lower()
+    return any(needle in str(value).lower() for value in event.ioc.values())
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from app.ai.schemas import AIAnalyticsFilter
+from app.events.repositories import EventRepository, NormalizedEventQuery
 from app.events.schemas import NormalizedEvent
 
 
@@ -29,3 +30,21 @@ class InMemoryAIEventRepository:
             and (filters.category is None or event.category == filters.category)
         ]
 
+
+@dataclass
+class RepositoryBackedAIEventRepository:
+    """Adapter that keeps AI analytics windows repository-backed."""
+
+    repository: EventRepository
+
+    async def list_events(self, filters: AIAnalyticsFilter) -> list[NormalizedEvent]:
+        return await self.repository.list_normalized_events(
+            NormalizedEventQuery(
+                start_time=filters.start_time,
+                end_time=filters.end_time,
+                tenant_id=filters.tenant_id,
+                category=filters.category,
+                limit=2_000,
+                newest_first=False,
+            )
+        )

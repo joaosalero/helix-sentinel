@@ -1,7 +1,7 @@
 """SOC analytics API routes."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Request
 from fastapi.encoders import jsonable_encoder
@@ -17,6 +17,8 @@ from app.analytics.repositories import (
 from app.analytics.schemas import (
     AnalyticsFilter,
     CountSummary,
+    EventSearchFilters,
+    EventSearchResponse,
     SocOverview,
     SourceMetric,
     TrendPoint,
@@ -28,7 +30,12 @@ from app.core.dependencies.security import (
     resolve_current_user_from_request,
     resolve_tenant_scope_for_request,
 )
-from app.events.repositories import InMemoryEventRepository, PostgresEventRepository
+from app.events.repositories import (
+    EventRepository,
+    InMemoryEventRepository,
+    NormalizedEventQuery,
+    PostgresEventRepository,
+)
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -82,6 +89,45 @@ async def source_summary(request: Request) -> list[SourceMetric] | JSONResponse:
         return parsed
     filters, service = parsed
     return await service.repository.source_metrics(filters)
+
+
+@router.get("/events", response_model=EventSearchResponse)
+async def search_events(request: Request) -> EventSearchResponse | JSONResponse:
+    """Return bounded normalized events for analyst investigations."""
+    principal = await resolve_current_user_from_request(request)
+    await ensure_permissions_for_request(request, principal, {Permission.ANALYTICS_READ.value})
+    analytics_requests_total.labels(endpoint="events").inc()
+    try:
+        filters = EventSearchFilters.model_validate(_query_params(request))
+    except (ValidationError, ValueError) as exc:
+        detail = exc.errors() if isinstance(exc, ValidationError) else str(exc)
+        return JSONResponse(status_code=422, content={"detail": jsonable_encoder(detail)})
+    tenant_id = await resolve_tenant_scope_for_request(request, principal, filters.tenant_id)
+    filters = filters.model_copy(update={"tenant_id": tenant_id})
+    event_repository = cast(EventRepository, request.app.state.event_repository)
+    events = await event_repository.list_normalized_events(
+        NormalizedEventQuery(
+            start_time=filters.start_time,
+            end_time=filters.end_time,
+            tenant_id=filters.tenant_id,
+            source=filters.source,
+            source_product=filters.source_product,
+            source_vendor=filters.source_vendor,
+            category=filters.category,
+            severity=filters.severity,
+            title=filters.title,
+            actor_username=filters.actor_username,
+            actor_email=filters.actor_email,
+            actor_ip=filters.actor_ip,
+            asset_hostname=filters.asset_hostname,
+            asset_ip=filters.asset_ip,
+            ioc_value=filters.ioc_value,
+            limit=filters.limit,
+            offset=filters.offset,
+            newest_first=True,
+        )
+    )
+    return EventSearchResponse(items=events, limit=filters.limit, offset=filters.offset)
 
 
 async def _prepare_analytics_request(

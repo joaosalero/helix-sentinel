@@ -11,7 +11,7 @@ The initial implementation supports:
 - Lifecycle states: `draft`, `active`, and `deprecated`.
 - Severity, category, tags, references, authorship, false-positive notes, tuning metadata, and operational notes.
 - MITRE ATT&CK technique and tactic extraction from Sigma tags.
-- Secure APIs for import, listing, filtering, pagination, and detail retrieval.
+- Secure APIs for import, listing, operational filtering, pagination, and detail retrieval.
 - Bounded active-rule execution over persisted normalized events.
 - PostgreSQL-backed open alert records for matched rule/event pairs.
 - Tenant-scoped alert queues and lightweight analyst state transitions.
@@ -24,7 +24,7 @@ Sigma parsing uses `yaml.safe_load` and accepts only YAML mappings with a non-em
 
 ## Execution Lifecycle
 
-Detection execution is synchronous and bounded by tenant, time range, optional source, and event limit. Only active rules produce matches. Evaluation uses normalized event fields and conservative Sigma-style selectors such as exact, contains, startswith, and endswith comparisons. Matched rule/event pairs create de-duplicated `open` alert records while execution remains synchronous. Analysts can move alerts from `open` to `acknowledged` to `closed`, with assignment, timestamps, disposition, and a concise investigation note. Execution and alert workflow changes emit audit events and Prometheus counters, but do not create incident records.
+Detection execution is synchronous and bounded by tenant, time range, optional source, and event limit. Only active rules produce matches. Evaluation uses normalized event fields and conservative Sigma-style selectors such as exact, contains, startswith, and endswith comparisons. Matched rule/event pairs create de-duplicated `open` alert records while execution remains synchronous. Analysts can filter alert queues by status, severity, category, source, rule, event, assignee, and event time window, then move alerts from `open` to `acknowledged` to `closed`, with assignment, timestamps, disposition, and a concise investigation note. Execution and alert workflow changes emit audit events and Prometheus counters, but do not create incident records.
 
 ## ATT&CK Mapping
 
@@ -32,7 +32,7 @@ ATT&CK mappings are extracted from tags such as `attack.execution` and `attack.t
 
 ## Lifecycle and Quality Metadata
 
-Rules carry status, false-positive notes, tuning metadata, quality metadata, and operational notes. Advanced quality scoring and false-positive analytics are intentionally deferred until alert and incident lifecycle data exists.
+Rules carry status, false-positive notes, tuning metadata, quality metadata, and operational notes. Rule listing supports source and title filters in addition to lifecycle, severity, category, tag, and ATT&CK technique filters. Advanced quality scoring and false-positive analytics are intentionally deferred until alert and incident lifecycle data exists.
 
 The authoritative runtime uses a PostgreSQL-backed detection rule repository for rule metadata and ATT&CK mappings. In-memory detection repositories remain available for isolated tests and explicit local overrides.
 

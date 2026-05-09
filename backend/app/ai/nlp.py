@@ -28,7 +28,17 @@ def extract_keywords(event: NormalizedEvent) -> list[str]:
         [
             event.title,
             event.source_name,
+            event.source_product or "",
+            event.source_vendor or "",
             event.category.value,
+            " ".join(
+                str(value)
+                for value in event.actor.model_dump(exclude_none=True).values()
+            ),
+            " ".join(
+                str(value)
+                for value in event.asset.model_dump(exclude_none=True).values()
+            ),
             " ".join(str(value) for value in event.network.values()),
             " ".join(str(value) for value in event.ioc.values()),
         ]

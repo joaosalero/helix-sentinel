@@ -61,6 +61,8 @@ class InMemoryDetectionRuleRepository(DetectionRuleRepository):
             if (filters.status is None or rule.status == filters.status)
             and (filters.severity is None or rule.severity == filters.severity)
             and (filters.category is None or rule.category == filters.category)
+            and (filters.source is None or rule.source == filters.source)
+            and _contains_text(rule.title, filters.title)
             and (filters.tag is None or filters.tag in rule.metadata.tags)
             and (
                 filters.attack_technique is None
@@ -93,11 +95,22 @@ class PostgresDetectionRuleRepository(DetectionRuleRepository):
 
     async def list(self, filters: DetectionRuleListFilters) -> tuple[list[DetectionRule], int]:
         async with self.session_factory() as session:
-            statement = _filtered_statement(filters).order_by(DetectionRuleRecord.updated_at.desc())
-            records = list((await session.scalars(statement)).all())
-            total = len(records)
-            window = records[filters.offset : filters.offset + filters.limit]
-            return [_to_rule_schema(record) for record in window], total
+            base_statement = _filtered_statement(filters)
+            records = list(
+                (
+                    await session.scalars(
+                        base_statement.order_by(DetectionRuleRecord.updated_at.desc())
+                        .offset(filters.offset)
+                        .limit(filters.limit)
+                    )
+                ).all()
+            )
+            total = await session.scalar(
+                select(func.count()).select_from(
+                    _filtered_statement(filters, load_attack=False).subquery()
+                )
+            )
+            return [_to_rule_schema(record) for record in records], int(total or 0)
 
 
 class DetectionAlertRepository:
@@ -167,6 +180,13 @@ class InMemoryDetectionAlertRepository(DetectionAlertRepository):
             if (filters.tenant_id is None or alert.tenant_id == filters.tenant_id)
             and (filters.status is None or alert.status == filters.status)
             and (filters.severity is None or alert.severity == filters.severity)
+            and (filters.category is None or alert.category == filters.category)
+            and (filters.source is None or alert.source_name == filters.source)
+            and (filters.rule_id is None or alert.rule_id == filters.rule_id)
+            and (filters.event_id is None or alert.event_id == filters.event_id)
+            and (filters.assigned_to is None or alert.assigned_to == filters.assigned_to)
+            and (filters.start_time is None or alert.event_time >= filters.start_time)
+            and (filters.end_time is None or alert.event_time <= filters.end_time)
         ]
         filtered.sort(key=lambda alert: alert.updated_at, reverse=True)
         return filtered[filters.offset : filters.offset + filters.limit], len(filtered)
@@ -284,16 +304,26 @@ class PostgresDetectionAlertRepository(DetectionAlertRepository):
             return _to_alert_schema(record) if record is not None else None
 
 
-def _filtered_statement(filters: DetectionRuleListFilters) -> Select[tuple[DetectionRuleRecord]]:
-    statement = select(DetectionRuleRecord).options(
-        selectinload(DetectionRuleRecord.attack_mappings)
-    )
+def _filtered_statement(
+    filters: DetectionRuleListFilters,
+    *,
+    load_attack: bool = True,
+) -> Select[tuple[DetectionRuleRecord]]:
+    statement = select(DetectionRuleRecord)
+    if load_attack:
+        statement = statement.options(selectinload(DetectionRuleRecord.attack_mappings))
     if filters.status is not None:
         statement = statement.where(DetectionRuleRecord.status == filters.status.value)
     if filters.severity is not None:
         statement = statement.where(DetectionRuleRecord.severity == filters.severity.value)
     if filters.category is not None:
         statement = statement.where(DetectionRuleRecord.category == filters.category.value)
+    if filters.source is not None:
+        statement = statement.where(DetectionRuleRecord.source == filters.source)
+    if filters.title is not None:
+        statement = statement.where(
+            DetectionRuleRecord.title.ilike(f"%{_escape_like(filters.title)}%", escape="\\")
+        )
     if filters.tag is not None:
         statement = statement.where(DetectionRuleRecord.tags.contains([filters.tag]))
     if filters.attack_technique is not None:
@@ -315,7 +345,31 @@ def _filtered_alert_statement(
         statement = statement.where(DetectionAlertRecord.status == filters.status.value)
     if filters.severity is not None:
         statement = statement.where(DetectionAlertRecord.severity == filters.severity.value)
+    if filters.category is not None:
+        statement = statement.where(DetectionAlertRecord.category == filters.category.value)
+    if filters.source is not None:
+        statement = statement.where(DetectionAlertRecord.source_name == filters.source)
+    if filters.rule_id is not None:
+        statement = statement.where(DetectionAlertRecord.rule_id == filters.rule_id)
+    if filters.event_id is not None:
+        statement = statement.where(DetectionAlertRecord.event_id == filters.event_id)
+    if filters.assigned_to is not None:
+        statement = statement.where(DetectionAlertRecord.assigned_to == filters.assigned_to)
+    if filters.start_time is not None:
+        statement = statement.where(DetectionAlertRecord.event_time >= filters.start_time)
+    if filters.end_time is not None:
+        statement = statement.where(DetectionAlertRecord.event_time <= filters.end_time)
     return statement
+
+
+def _contains_text(value: str | None, expected: str | None) -> bool:
+    if expected is None:
+        return True
+    return value is not None and expected.lower() in value.lower()
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _to_rule_record(rule: DetectionRule) -> DetectionRuleRecord:

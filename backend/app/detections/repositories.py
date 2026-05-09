@@ -2,9 +2,10 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Select, func, select, update
+from sqlalchemy import Select, case, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
@@ -23,6 +24,23 @@ from app.detections.schemas import (
     DetectionRuleListFilters,
     DetectionRuleMetadata,
 )
+
+
+@dataclass(frozen=True)
+class AlertReportingSnapshot:
+    """Aggregated alert workflow metrics for SOC reporting."""
+
+    total_alerts: int = 0
+    open_alerts: int = 0
+    acknowledged_alerts: int = 0
+    closed_alerts: int = 0
+    high_or_critical_alerts: int = 0
+    unassigned_open_alerts: int = 0
+    oldest_open_alert_minutes: float | None = None
+    mtta_minutes: float | None = None
+    mttr_minutes: float | None = None
+    true_positive_alerts: int = 0
+    false_positive_alerts: int = 0
 
 
 class DetectionRuleRepository:
@@ -128,6 +146,17 @@ class DetectionAlertRepository:
         """Return tenant-scoped alerts for analyst queues."""
         raise NotImplementedError
 
+    async def reporting_snapshot(
+        self,
+        *,
+        tenant_id: str | None,
+        start_time: datetime,
+        end_time: datetime,
+        now: datetime,
+    ) -> AlertReportingSnapshot:
+        """Return bounded alert workflow aggregates for SOC reporting."""
+        raise NotImplementedError
+
     async def update_workflow(
         self,
         alert_id: UUID,
@@ -190,6 +219,57 @@ class InMemoryDetectionAlertRepository(DetectionAlertRepository):
         ]
         filtered.sort(key=lambda alert: alert.updated_at, reverse=True)
         return filtered[filters.offset : filters.offset + filters.limit], len(filtered)
+
+    async def reporting_snapshot(
+        self,
+        *,
+        tenant_id: str | None,
+        start_time: datetime,
+        end_time: datetime,
+        now: datetime,
+    ) -> AlertReportingSnapshot:
+        alerts = [
+            alert
+            for alert in self.alerts
+            if start_time <= alert.event_time <= end_time
+            and (tenant_id is None or alert.tenant_id == tenant_id)
+        ]
+        open_alerts = [alert for alert in alerts if alert.status == DetectionAlertStatus.OPEN]
+        acknowledged = [
+            _minutes_between(alert.created_at, alert.acknowledged_at)
+            for alert in alerts
+            if alert.acknowledged_at is not None
+        ]
+        closed = [
+            _minutes_between(alert.created_at, alert.closed_at)
+            for alert in alerts
+            if alert.closed_at is not None
+        ]
+        return AlertReportingSnapshot(
+            total_alerts=len(alerts),
+            open_alerts=sum(alert.status == DetectionAlertStatus.OPEN for alert in alerts),
+            acknowledged_alerts=sum(
+                alert.status == DetectionAlertStatus.ACKNOWLEDGED for alert in alerts
+            ),
+            closed_alerts=sum(alert.status == DetectionAlertStatus.CLOSED for alert in alerts),
+            high_or_critical_alerts=sum(
+                alert.severity.value in {"high", "critical"} for alert in alerts
+            ),
+            unassigned_open_alerts=sum(alert.assigned_to is None for alert in open_alerts),
+            oldest_open_alert_minutes=(
+                max(_minutes_between(alert.created_at, now) for alert in open_alerts)
+                if open_alerts
+                else None
+            ),
+            mtta_minutes=_average(acknowledged),
+            mttr_minutes=_average(closed),
+            true_positive_alerts=sum(
+                alert.disposition == "true_positive" for alert in alerts
+            ),
+            false_positive_alerts=sum(
+                alert.disposition == "false_positive" for alert in alerts
+            ),
+        )
 
     async def update_workflow(
         self,
@@ -268,6 +348,93 @@ class PostgresDetectionAlertRepository(DetectionAlertRepository):
                 select(func.count()).select_from(_filtered_alert_statement(filters).subquery())
             )
             return [_to_alert_schema(record) for record in records], int(total or 0)
+
+    async def reporting_snapshot(
+        self,
+        *,
+        tenant_id: str | None,
+        start_time: datetime,
+        end_time: datetime,
+        now: datetime,
+    ) -> AlertReportingSnapshot:
+        clauses = [
+            DetectionAlertRecord.event_time >= start_time,
+            DetectionAlertRecord.event_time <= end_time,
+        ]
+        if tenant_id is not None:
+            clauses.append(DetectionAlertRecord.tenant_id == tenant_id)
+        minutes_to_ack = func.extract(
+            "epoch",
+            DetectionAlertRecord.acknowledged_at - DetectionAlertRecord.created_at,
+        ) / 60
+        minutes_to_close = func.extract(
+            "epoch",
+            DetectionAlertRecord.closed_at - DetectionAlertRecord.created_at,
+        ) / 60
+        statement = select(
+            func.count().label("total_alerts"),
+            _count_when(DetectionAlertRecord.status == DetectionAlertStatus.OPEN.value).label(
+                "open_alerts"
+            ),
+            _count_when(
+                DetectionAlertRecord.status == DetectionAlertStatus.ACKNOWLEDGED.value
+            ).label("acknowledged_alerts"),
+            _count_when(DetectionAlertRecord.status == DetectionAlertStatus.CLOSED.value).label(
+                "closed_alerts"
+            ),
+            _count_when(
+                DetectionAlertRecord.severity.in_(["high", "critical"])
+            ).label("high_or_critical_alerts"),
+            _count_when(
+                DetectionAlertRecord.status == DetectionAlertStatus.OPEN.value,
+                DetectionAlertRecord.assigned_to.is_(None),
+            ).label("unassigned_open_alerts"),
+            func.min(
+                case(
+                    (
+                        DetectionAlertRecord.status == DetectionAlertStatus.OPEN.value,
+                        DetectionAlertRecord.created_at,
+                    ),
+                    else_=None,
+                )
+            ).label("oldest_open_created_at"),
+            func.avg(
+                case(
+                    (DetectionAlertRecord.acknowledged_at.is_not(None), minutes_to_ack),
+                    else_=None,
+                )
+            ).label("mtta_minutes"),
+            func.avg(
+                case(
+                    (DetectionAlertRecord.closed_at.is_not(None), minutes_to_close),
+                    else_=None,
+                )
+            ).label("mttr_minutes"),
+            _count_when(DetectionAlertRecord.disposition == "true_positive").label(
+                "true_positive_alerts"
+            ),
+            _count_when(DetectionAlertRecord.disposition == "false_positive").label(
+                "false_positive_alerts"
+            ),
+        ).where(*clauses)
+        async with self.session_factory() as session:
+            row = (await session.execute(statement)).one()
+        oldest_open = row.oldest_open_created_at
+        return AlertReportingSnapshot(
+            total_alerts=int(row.total_alerts or 0),
+            open_alerts=int(row.open_alerts or 0),
+            acknowledged_alerts=int(row.acknowledged_alerts or 0),
+            closed_alerts=int(row.closed_alerts or 0),
+            high_or_critical_alerts=int(row.high_or_critical_alerts or 0),
+            unassigned_open_alerts=int(row.unassigned_open_alerts or 0),
+            oldest_open_alert_minutes=(
+                _minutes_between(oldest_open, now) if oldest_open is not None else None
+            ),
+            mtta_minutes=_rounded_float(row.mtta_minutes),
+            mttr_minutes=_rounded_float(row.mttr_minutes),
+            true_positive_alerts=int(row.true_positive_alerts or 0),
+            false_positive_alerts=int(row.false_positive_alerts or 0),
+        )
 
     async def update_workflow(
         self,
@@ -360,6 +527,27 @@ def _filtered_alert_statement(
     if filters.end_time is not None:
         statement = statement.where(DetectionAlertRecord.event_time <= filters.end_time)
     return statement
+
+
+def _count_when(*conditions: Any) -> Any:
+    condition = conditions[0]
+    for next_condition in conditions[1:]:
+        condition = condition & next_condition
+    return func.sum(case((condition, 1), else_=0))
+
+
+def _minutes_between(start: datetime, end: datetime | None) -> float:
+    if end is None:
+        return 0.0
+    return round((end - start).total_seconds() / 60, 2)
+
+
+def _average(values: list[float]) -> float | None:
+    return round(sum(values) / len(values), 2) if values else None
+
+
+def _rounded_float(value: object) -> float | None:
+    return round(float(value), 2) if value is not None else None
 
 
 def _contains_text(value: str | None, expected: str | None) -> bool:

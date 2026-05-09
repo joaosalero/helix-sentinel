@@ -5,8 +5,10 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.ai.schemas import AIAnalyticsSummary
 from app.events.schemas import NormalizedEvent
 from app.events.taxonomy import EventCategory, EventSeverity
+from app.threats.schemas import ThreatSummary
 
 
 class TrendBucket(StrEnum):
@@ -126,6 +128,63 @@ class OperationalKpis(BaseModel):
     high_severity_ratio: float
     authentication_failure_ratio: float
     events_per_source: float
+
+
+class AlertWorkflowKpis(BaseModel):
+    """Persisted alert workflow KPIs for SOC reporting."""
+
+    alert_volume: int
+    open_alerts: int
+    acknowledged_alerts: int
+    closed_alerts: int
+    high_or_critical_alerts: int
+    unassigned_open_alerts: int
+    oldest_open_alert_minutes: float | None = None
+    mtta_minutes: float | None = None
+    mttr_minutes: float | None = None
+    true_positive_rate: float | None = None
+    false_positive_rate: float | None = None
+
+
+class ExecutiveSecuritySummary(BaseModel):
+    """Executive-ready security posture summary."""
+
+    posture: str
+    total_events: int
+    high_or_critical_events: int
+    alert_volume: int
+    open_alerts: int
+    high_or_critical_alerts: int
+    threat_insights: int
+    high_or_critical_threat_insights: int
+    ai_anomalies: int
+    high_confidence_ai_anomalies: int
+    active_sources: int
+
+
+class ReportingFinding(BaseModel):
+    """Prioritized deterministic reporting observation."""
+
+    name: str
+    severity: str
+    count: int
+    reason: str
+
+
+class SocReport(BaseModel):
+    """Executive and analyst-oriented SOC report."""
+
+    period_start: datetime
+    period_end: datetime
+    executive_summary: ExecutiveSecuritySummary
+    operational_kpis: OperationalKpis
+    alert_workflow: AlertWorkflowKpis
+    severity_distribution: list[CountSummary]
+    category_distribution: list[CountSummary]
+    top_sources: list[SourceMetric]
+    threat_summary: ThreatSummary
+    ai_summary: AIAnalyticsSummary
+    findings: list[ReportingFinding]
 
 
 class SocOverview(BaseModel):

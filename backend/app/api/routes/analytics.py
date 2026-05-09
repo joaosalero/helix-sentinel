@@ -1,6 +1,6 @@
 """SOC analytics API routes."""
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from fastapi import APIRouter, Request
@@ -8,6 +8,9 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from app.ai.repositories import InMemoryAIEventRepository, RepositoryBackedAIEventRepository
+from app.ai.schemas import AIAnalyticsFilter, AIAnalyticsSummary
+from app.ai.service import AIAnalyticsService
 from app.analytics.metrics import analytics_requests_total
 from app.analytics.repositories import (
     AnalyticsRepository,
@@ -20,6 +23,7 @@ from app.analytics.schemas import (
     EventSearchFilters,
     EventSearchResponse,
     SocOverview,
+    SocReport,
     SourceMetric,
     TrendPoint,
 )
@@ -30,12 +34,19 @@ from app.core.dependencies.security import (
     resolve_current_user_from_request,
     resolve_tenant_scope_for_request,
 )
+from app.detections.repositories import AlertReportingSnapshot, DetectionAlertRepository
 from app.events.repositories import (
     EventRepository,
     InMemoryEventRepository,
     NormalizedEventQuery,
     PostgresEventRepository,
 )
+from app.threats.repositories import (
+    EventRepositoryThreatEventRepository,
+    InMemoryThreatEventRepository,
+)
+from app.threats.schemas import ThreatAnalyticsFilter, ThreatSummary
+from app.threats.service import ThreatAnalyticsService
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -49,6 +60,31 @@ async def overview(request: Request) -> SocOverview | JSONResponse:
     filters, service = parsed
     correlation_id = getattr(request.state, "correlation_id", None)
     return await service.overview(filters, correlation_id=correlation_id)
+
+
+@router.get("/report", response_model=SocReport)
+async def soc_report(request: Request) -> SocReport | JSONResponse:
+    """Return executive and analyst-oriented SOC reporting aggregates."""
+    parsed = await _prepare_analytics_request(request, "report")
+    if isinstance(parsed, JSONResponse):
+        return parsed
+    filters, service = parsed
+    if filters.end_time - filters.start_time > timedelta(days=90):
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "SOC report time range must not exceed 90 days"},
+        )
+    correlation_id = getattr(request.state, "correlation_id", None)
+    alert_snapshot = await _alert_snapshot(request, filters)
+    threat_summary = await _threat_summary(request, filters)
+    ai_summary = await _ai_summary(request, filters)
+    return await service.report(
+        filters,
+        alert_snapshot=alert_snapshot,
+        threat_summary=threat_summary,
+        ai_summary=ai_summary,
+        correlation_id=correlation_id,
+    )
 
 
 @router.get("/severity", response_model=list[CountSummary])
@@ -155,6 +191,60 @@ async def _analytics_repository(request: Request) -> AnalyticsRepository:
         return PostgresAnalyticsRepository(event_repository.session_factory)
     events = await event_repository.list_normalized_events()
     return InMemoryAnalyticsRepository(events)
+
+
+async def _alert_snapshot(
+    request: Request,
+    filters: AnalyticsFilter,
+) -> AlertReportingSnapshot:
+    repository = getattr(request.app.state, "detection_alert_repository", None)
+    if repository is None:
+        return AlertReportingSnapshot()
+    return await cast(DetectionAlertRepository, repository).reporting_snapshot(
+        tenant_id=filters.tenant_id,
+        start_time=filters.start_time,
+        end_time=filters.end_time,
+        now=datetime.now(UTC),
+    )
+
+
+async def _threat_summary(request: Request, filters: AnalyticsFilter) -> ThreatSummary:
+    event_repository = request.app.state.event_repository
+    repository = (
+        InMemoryThreatEventRepository(event_repository.normalized_events)
+        if isinstance(event_repository, InMemoryEventRepository)
+        else EventRepositoryThreatEventRepository(event_repository)
+    )
+    service = ThreatAnalyticsService(repository)
+    return await service.summary(
+        ThreatAnalyticsFilter(
+            start_time=filters.start_time,
+            end_time=filters.end_time,
+            tenant_id=filters.tenant_id,
+            limit=100,
+            offset=0,
+        )
+    )
+
+
+async def _ai_summary(request: Request, filters: AnalyticsFilter) -> AIAnalyticsSummary:
+    event_repository = request.app.state.event_repository
+    repository = (
+        InMemoryAIEventRepository(event_repository.normalized_events)
+        if isinstance(event_repository, InMemoryEventRepository)
+        else RepositoryBackedAIEventRepository(event_repository)
+    )
+    service = AIAnalyticsService(repository)
+    return await service.summary(
+        AIAnalyticsFilter(
+            start_time=filters.start_time,
+            end_time=filters.end_time,
+            tenant_id=filters.tenant_id,
+            category=filters.category,
+            limit=100,
+            offset=0,
+        )
+    )
 
 
 def _query_params(request: Request) -> dict[str, Any]:

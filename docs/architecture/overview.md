@@ -27,4 +27,4 @@ The schema is vector-ready: future pgvector columns can be introduced in AI enri
 
 ## Frontend Boundary
 
-The frontend scaffold prepares a Next.js application with TypeScript, TailwindCSS, and shadcn/ui conventions. No product pages are implemented yet; the structure is ready for dense operational dashboards, reusable layout primitives, accessible controls, and domain-specific feature folders.
+The frontend is a Next.js application with TypeScript, TailwindCSS, and shadcn/ui conventions. Its first operational surface is a server-rendered SOC operations dashboard backed by typed API clients for SOC reporting and open alert queues. API bearer tokens are read from server-only environment variables, and the UI intentionally avoids client-side token storage, global state frameworks, microfrontends, and charting ecosystems.

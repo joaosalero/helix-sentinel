@@ -16,6 +16,9 @@ from app.api.routes.analytics import _analytics_repository
 from app.auth.rbac import permissions_for_roles
 from app.core.config.settings import SecuritySettings
 from app.core.security.passwords import hash_password
+from app.detections.repositories import InMemoryDetectionAlertRepository
+from app.detections.schemas import DetectionAlert, DetectionAlertStatus
+from app.detections.taxonomy import DetectionCategory, DetectionSeverity
 from app.events.repositories import InMemoryEventRepository, PostgresEventRepository
 from app.events.schemas import NormalizedActor, NormalizedAsset, NormalizedEvent
 from app.events.taxonomy import EventCategory, EventSeverity
@@ -135,8 +138,43 @@ async def analytics_context() -> AsyncIterator[AnalyticsApiContext]:
             ioc={"indicator": "bad.example"},
         )
     )
+    alert_repository = InMemoryDetectionAlertRepository()
+    alert_repository.alerts.extend(
+        [
+            DetectionAlert(
+                tenant_id="tenant-a",
+                rule_id=uuid4(),
+                event_id=event_repository.normalized_events[0].id,
+                status=DetectionAlertStatus.OPEN,
+                severity=DetectionSeverity.HIGH,
+                category=DetectionCategory.AUTHENTICATION,
+                title="Repeated login failures",
+                source_name="okta",
+                event_time=base,
+                created_at=base,
+                updated_at=base,
+            ),
+            DetectionAlert(
+                tenant_id="tenant-a",
+                rule_id=uuid4(),
+                event_id=event_repository.normalized_events[1].id,
+                status=DetectionAlertStatus.CLOSED,
+                severity=DetectionSeverity.CRITICAL,
+                category=DetectionCategory.ENDPOINT,
+                title="Endpoint critical alert",
+                source_name="edr",
+                event_time=base + timedelta(hours=1),
+                acknowledged_at=base + timedelta(minutes=10),
+                closed_at=base + timedelta(hours=1),
+                disposition="true_positive",
+                created_at=base,
+                updated_at=base + timedelta(hours=1),
+            ),
+        ]
+    )
     app = create_security_app()
     app.state.event_repository = event_repository
+    app.state.detection_alert_repository = alert_repository
     app.state.user_repository = InMemoryUserRepository([analyst, denied])
     app.state.security_settings = SecuritySettings(
         environment="test",
@@ -232,6 +270,28 @@ async def test_sources_endpoint_supports_pagination(
 
     assert response.status_code == 200
     assert len(response.json()) == 1
+
+
+async def test_report_endpoint_returns_soc_reporting_aggregates(
+    analytics_context: AnalyticsApiContext,
+) -> None:
+    response = await analytics_context.client.get(
+        "/api/v1/analytics/report",
+        params={
+            "start_time": "2026-05-06T00:00:00+00:00",
+            "end_time": "2026-05-09T00:00:00+00:00",
+        },
+        headers={"Authorization": f"Bearer {analytics_context.analyst_token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["executive_summary"]["alert_volume"] == 2
+    assert body["executive_summary"]["open_alerts"] == 1
+    assert body["alert_workflow"]["true_positive_rate"] == 1.0
+    assert body["threat_summary"]["total_insights"] >= 1
+    assert body["ai_summary"]["total_anomalies"] >= 1
+    assert body["findings"]
 
 
 async def test_event_search_supports_investigation_filters(

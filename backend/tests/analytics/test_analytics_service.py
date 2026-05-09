@@ -5,11 +5,14 @@ from uuid import uuid4
 
 import pytest
 
+from app.ai.schemas import AIAnalyticsSummary
 from app.analytics.repositories import InMemoryAnalyticsRepository
 from app.analytics.schemas import AnalyticsFilter, TrendBucket
 from app.analytics.service import SocAnalyticsService
+from app.detections.repositories import AlertReportingSnapshot
 from app.events.schemas import NormalizedEvent
 from app.events.taxonomy import EventCategory, EventSeverity
+from app.threats.schemas import ThreatSummary
 
 
 def _event(
@@ -136,3 +139,56 @@ async def test_source_metrics_are_paginated(analytics_events: list[NormalizedEve
     assert len(sources) == 1
     assert sources[0].source == "okta"
     assert sources[0].total_events == 2
+
+
+async def test_report_combines_event_alert_threat_and_ai_kpis(
+    analytics_events: list[NormalizedEvent],
+) -> None:
+    service = SocAnalyticsService(InMemoryAnalyticsRepository(analytics_events))
+    filters = AnalyticsFilter(
+        start_time=datetime(2026, 5, 6, tzinfo=UTC),
+        end_time=datetime(2026, 5, 10, tzinfo=UTC),
+    )
+
+    report = await service.report(
+        filters,
+        alert_snapshot=AlertReportingSnapshot(
+            total_alerts=3,
+            open_alerts=1,
+            acknowledged_alerts=1,
+            closed_alerts=1,
+            high_or_critical_alerts=1,
+            unassigned_open_alerts=1,
+            mtta_minutes=12.5,
+            mttr_minutes=90.0,
+            true_positive_alerts=1,
+        ),
+        threat_summary=ThreatSummary(
+            total_insights=2,
+            high_or_critical=1,
+            ioc_related=1,
+            repeated_auth_failures=0,
+            suspicious_ip_reuse=0,
+            endpoint_repetition=1,
+            event_bursts=0,
+            max_risk_score=75,
+        ),
+        ai_summary=AIAnalyticsSummary(
+            total_anomalies=2,
+            high_confidence=1,
+            max_score=80,
+            suspicious_classifications=2,
+            enriched_events=4,
+        ),
+        correlation_id="corr-report",
+    )
+
+    assert report.executive_summary.posture == "elevated"
+    assert report.alert_workflow.true_positive_rate == 1.0
+    assert report.threat_summary.high_or_critical == 1
+    assert report.ai_summary.high_confidence == 1
+    assert {finding.name for finding in report.findings} >= {
+        "open_alert_queue",
+        "high_risk_threat_insights",
+        "high_confidence_ai_anomalies",
+    }

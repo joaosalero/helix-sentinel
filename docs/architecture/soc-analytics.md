@@ -26,14 +26,15 @@ Analytics endpoints live under `/api/v1/analytics` and require `analytics:read`.
 - `/trends`: event volume by hour or day.
 - `/sources`: paginated source metrics.
 - `/events`: bounded normalized event retrieval for analyst investigations.
+- `/report`: executive and analyst SOC reporting summary.
 
 ## Filtering
 
-Filters are validated through dedicated schemas. Aggregation filters support time range, tenant, source, category, severity, trend bucket, limit, and offset. Normalized event retrieval adds source product/vendor, title contains, actor username/email/IP, asset hostname/IP, and IOC value filters. Aggregation time ranges are capped at 366 days; event search is capped at 90 days and returns newest events first.
+Filters are validated through dedicated schemas. Aggregation filters support time range, tenant, source, category, severity, trend bucket, limit, and offset. Normalized event retrieval adds source product/vendor, title contains, actor username/email/IP, asset hostname/IP, and IOC value filters. Aggregation time ranges are capped at 366 days; event search and SOC reports are capped at 90 days.
 
 ## KPI Rationale
 
-High-severity ratio, authentication failure ratio, and events per source are calculated from normalized events. MTTA, MTTR, true-positive rate, false-positive rate, and alert volume are nullable until alert and incident lifecycle data exists. This avoids inventing operational metrics before the platform has the required source data.
+High-severity ratio, authentication failure ratio, and events per source are calculated from normalized events. Alert volume, open queue size, unassigned open alerts, MTTA, MTTR, and disposition rates are calculated from persisted detection alert workflow records when available. Threat and AI summary counts are composed from their deterministic analytics services.
 
 ## Query Strategy
 
@@ -45,6 +46,8 @@ Database-backed analytics uses SQL aggregation over normalized event records for
 - source and event time
 
 JSONB fields are used only for targeted actor, asset, and IOC filters on bounded event retrieval. Aggregation APIs still avoid payload-level aggregation and operate on normalized scalar columns first.
+
+SOC reports compose existing bounded repositories instead of introducing a reporting warehouse. Event aggregations come from normalized event analytics, alert workflow KPIs come from detection alert repositories, and threat/AI sections reuse deterministic summary services.
 
 ## Observability
 

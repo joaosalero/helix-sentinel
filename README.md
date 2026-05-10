@@ -1,58 +1,225 @@
 # Helix Sentinel
 
-Helix Sentinel is a production-oriented Security Analytics and Detection Engineering platform. It is designed as a modular monolith for SOC analytics, persisted alert workflow, investigation support, threat enrichment, validation workflows, and deterministic AI-assisted analysis without introducing premature distributed-system complexity.
+<p align="center">
+  <strong>Production-oriented Security Analytics and Detection Engineering Platform</strong>
+</p>
 
-## At a Glance
+<p align="center">
+  A modular-monolith SOC platform focused on operational visibility, persisted investigation workflows,
+  detection engineering, threat enrichment, auditability, and deterministic security analytics.
+</p>
 
-- **What it is:** a realistic SOC operations and security analytics application with persisted investigation workflows.
-- **What to review first:** the Next.js SOC dashboard, the alert lifecycle APIs, analytics/reporting services, and the architecture docs.
-- **What it avoids:** SIEM query languages, realtime streams, microservices, graph engines, and governance/compliance scope.
-- **Best demo path:** posture overview -> open alert queue -> selected alert investigation -> acknowledgement or closure -> audit/security activity.
-- **Release gate:** `make release-check` runs the full local validation suite used for publication readiness.
+---
 
-## Engineering Goals
+## Overview
 
-- Security-first backend foundations with typed Python, FastAPI, SQLAlchemy 2.x, PostgreSQL, Redis, JWT-ready authentication, and auditability.
-- Observability-first runtime with structured logs, correlation IDs, Prometheus-ready metrics, OpenTelemetry hooks, and health checks.
-- Domain-oriented modular monolith boundaries for identity, events, detections, analytics, threat intelligence, validation, and audit logging.
-- Operational SOC dashboard using Next.js, TypeScript, TailwindCSS, and shadcn/ui conventions.
-- DevSecOps-ready repository with linting, typing, testing, dependency scanning, secret scanning, and CI workflow foundations.
+Helix Sentinel is a security-focused SOC operations platform built to demonstrate realistic Detection Engineering, security analytics, operational workflows, and observability patterns without introducing unnecessary distributed-system complexity.
 
-## Repository Layout
+The project intentionally prioritizes:
+
+* deterministic operational workflows;
+* typed backend engineering;
+* security-first architecture;
+* auditability and observability;
+* modular domain boundaries;
+* maintainable infrastructure;
+* production-oriented backend design.
+
+Unlike many showcase SIEM projects, Helix Sentinel deliberately avoids:
+
+* realtime streaming pipelines;
+* microservice fragmentation;
+* SIEM query languages;
+* artificial "AI-everywhere" abstractions;
+* graph engines;
+* governance/compliance platform scope.
+
+The repository is designed as a realistic engineering portfolio project for:
+
+* Detection Engineering;
+* SOC Platform Engineering;
+* Security Backend Engineering;
+* AppSec-oriented backend development;
+* DevSecOps workflows;
+* operational observability;
+* security analytics.
+
+---
+
+# Dashboard Preview
+
+> Replace the placeholder images below with real screenshots before public promotion.
+
+## Executive Security Posture
 
 ```text
-backend/        FastAPI modular monolith, domain modules, tests, Alembic
-frontend/       Next.js SOC operations dashboard and typed API client
-infra/          Local observability, security scanner, and Docker support files
-docs/           Architecture, security, operations, and development standards
-scripts/        Local bootstrap and validation helpers
-.github/        CI, security workflows, and contribution templates
+/docs/assets/dashboard-posture-overview.png
 ```
 
-## Showcase Surfaces
+## Alert Investigation Workflow
 
-The current public-facing experience centers on an operational SOC dashboard, not a marketing page. It demonstrates:
+```text
+/docs/assets/dashboard-alert-investigation.png
+```
 
-- Executive security posture, risk drivers, queue pressure, and consolidated SOC KPIs.
-- Open alert queues with assignment, age, severity, and selected-alert investigation context.
-- Analyst workflow actions for acknowledgement and closure with persisted investigation notes and dispositions.
-- Contextual event timelines using bounded source/category pivots around the selected alert.
-- Detection coverage, ATT&CK activity, silent active rules, and rule efficacy summaries.
-- Audit-backed security activity, tenant-scope denial visibility, actor concentration, and recent audit trail visibility.
-- Prometheus/Grafana-ready operational observability.
+## Threat Analytics and Coverage
 
-For a quick evaluator pass, start the API and frontend, open the dashboard, select an alert from the queue, review the context timeline and triage readiness block, then acknowledge or close the alert. That path exercises the persisted alert lifecycle, deterministic reporting layer, bounded investigation event retrieval, server-side API token handling, and audit-backed operational visibility without requiring a SIEM query language or realtime infrastructure. A concise reviewer path is available in [docs/showcase.md](docs/showcase.md).
+```text
+/docs/assets/dashboard-threat-analytics.png
+```
 
-## Local Setup
+---
 
-Prerequisites:
+# Core Features
 
-- Python 3.12
-- Node.js 20+
-- Docker and Docker Compose
-- Git with SSH configured for GitHub
+## SOC Operations Dashboard
 
-Bootstrap backend dependencies and local configuration:
+* Executive posture overview
+* Operational SOC KPIs
+* Queue pressure visibility
+* Alert age and assignment visibility
+* Detection coverage summaries
+* Threat and ATT&CK activity indicators
+* Investigation readiness panels
+* Audit-backed operational visibility
+
+## Detection Engineering
+
+* Persisted detection rules
+* Rule execution workflows
+* Alert lifecycle management
+* Detection efficacy visibility
+* Silent-rule tracking
+* Analyst acknowledgement and closure workflows
+
+## Threat Analytics
+
+* IOC enrichment
+* Threat summarization
+* AI-assisted anomaly scoring
+* Deterministic operational analytics
+* Bounded investigation pivots
+
+## Security Engineering
+
+* Structured logging
+* Correlation IDs
+* RBAC-ready architecture
+* Audit event persistence
+* Secret scanning
+* Dependency scanning
+* Semgrep security validation
+* Gitleaks integration
+* CI security workflows
+
+## Observability
+
+* Prometheus metrics
+* Grafana integration
+* OpenTelemetry hooks
+* Health/readiness endpoints
+* Operational telemetry support
+
+---
+
+# Architecture
+
+Helix Sentinel is intentionally implemented as a modular monolith.
+
+The architecture focuses on:
+
+* clear domain boundaries;
+* deterministic persistence;
+* operational simplicity;
+* maintainability;
+* lower infrastructure overhead;
+* strong typing and validation;
+* explicit security boundaries.
+
+## Technology Stack
+
+### Backend
+
+* Python 3.12
+* FastAPI
+* SQLAlchemy 2.x
+* PostgreSQL
+* Redis
+* Alembic
+* Pydantic
+
+### Frontend
+
+* Next.js
+* TypeScript
+* TailwindCSS
+* shadcn/ui
+
+### Security and Quality
+
+* Semgrep
+* Gitleaks
+* Dependabot
+* Ruff
+* MyPy
+* Pytest
+* Bandit
+* GitHub Actions
+
+### Observability
+
+* Prometheus
+* Grafana
+* OpenTelemetry
+
+---
+
+# Repository Structure
+
+```text
+backend/        FastAPI modular monolith, domain modules, repositories, tests
+frontend/       Next.js SOC dashboard and typed API integration
+infra/          Security scanners, observability, Docker, Semgrep configuration
+docs/           Architecture, operations, security, and development standards
+scripts/        Bootstrap, validation, and helper scripts
+.github/        CI workflows, templates, automation, and security pipelines
+```
+
+---
+
+# Operational Workflow Demonstrated
+
+The current implementation demonstrates a realistic SOC operational path:
+
+1. Security posture overview
+2. Alert queue triage
+3. Investigation context review
+4. Event pivot analysis
+5. Alert acknowledgement or closure
+6. Audit-backed activity tracking
+7. Detection and operational reporting
+
+The dashboard intentionally behaves like an operational workbench rather than a marketing-oriented UI.
+
+---
+
+# Quick Start
+
+## Prerequisites
+
+* Python 3.12
+* Node.js 20+
+* Docker and Docker Compose
+* Git
+
+## 1. Clone Repository
+
+```bash
+git clone <repository-url>
+cd helix-sentinel
+```
+
+## 2. Backend Setup
 
 ```bash
 python3.12 -m venv .venv
@@ -62,21 +229,25 @@ python -m pip install -e ".[dev,security]"
 cp .env.example .env
 ```
 
-Start infrastructure, apply migrations, and run the authoritative API:
+## 3. Start Infrastructure
 
 ```bash
 docker compose up -d postgres redis
+```
+
+## 4. Run Database Migrations
+
+```bash
 alembic -c backend/alembic.ini upgrade head
+```
+
+## 5. Start Backend API
+
+```bash
 uvicorn helix_sentinel.main:create_app --factory --app-dir backend --reload
 ```
 
-`helix_sentinel.main:create_app` is the authoritative backend runtime. It mounts health, metrics, authentication, event ingestion, Detection Engineering, SOC analytics, Threat Analytics, AI-assisted analytics, and IOC enrichment APIs under `HELIX_API_PREFIX` while exposing Prometheus metrics at `/metrics`.
-
-`helix_sentinel.db.base.Base` is the authoritative SQLAlchemy metadata owner. Alembic targets `helix_sentinel.db.models.Base.metadata`, which registers the active feature persistence models used by `app.*`.
-
-Authentication user lookups, audit event persistence, event ingestion persistence, detection rule persistence, and IOC enrichment persistence use PostgreSQL-backed repositories in the authoritative runtime. In-memory repositories are retained for isolated tests and explicit overrides.
-
-The frontend runs separately and calls the API from the server side. Set `HELIX_API_TOKEN` in `frontend/.env.local` when using protected API routes.
+## 6. Start Frontend
 
 ```bash
 cd frontend
@@ -84,25 +255,57 @@ npm install
 npm run dev
 ```
 
-Common local URLs:
+---
 
-- API readiness: `http://localhost:8000/api/v1/ready`
-- API metrics: `http://localhost:8000/metrics`
-- Frontend: `http://localhost:3000`
-- Prometheus: `http://localhost:9090`
-- Grafana: `http://localhost:3001`
+# Local URLs
 
-For the longer setup path, see [docs/development/local-setup.md](docs/development/local-setup.md).
+| Service       | URL                                                                      |
+| ------------- | ------------------------------------------------------------------------ |
+| Frontend      | [http://localhost:3000](http://localhost:3000)                           |
+| API Readiness | [http://localhost:8000/api/v1/ready](http://localhost:8000/api/v1/ready) |
+| API Metrics   | [http://localhost:8000/metrics](http://localhost:8000/metrics)           |
+| Prometheus    | [http://localhost:9090](http://localhost:9090)                           |
+| Grafana       | [http://localhost:3001](http://localhost:3001)                           |
 
-## Validation
+---
 
-Run the same checks expected by the repository workflows:
+# Environment Notes
+
+The frontend communicates with the backend from server-side routes.
+
+When using protected API endpoints, configure:
+
+```bash
+frontend/.env.local
+```
+
+With:
+
+```env
+HELIX_API_TOKEN=<token>
+```
+
+Never commit:
+
+* `.env`
+* `.env.local`
+* secrets
+* tokens
+* production credentials
+* tenant identifiers
+* private telemetry
+
+---
+
+# Validation and Quality Gates
+
+Run the repository validation suite:
 
 ```bash
 scripts/check.sh
 ```
 
-Or run targeted commands:
+Or execute targeted validations:
 
 ```bash
 make test
@@ -114,7 +317,7 @@ make frontend-typecheck
 make release-check
 ```
 
-Frontend-only checks:
+Frontend-only validation:
 
 ```bash
 cd frontend
@@ -122,40 +325,198 @@ npm run lint
 npm run typecheck
 ```
 
-## Development Commands
+---
+
+# Development Commands
+
+## Runtime
 
 ```bash
-make test
-make lint
-make typecheck
-make security
-make frontend-lint
-make frontend-typecheck
 make up
 make down
 ```
 
-`make up` starts PostgreSQL, Redis, Prometheus, the OpenTelemetry collector, and Grafana. Run the API with Uvicorn from the local shell so reload, logs, and debugger attachment stay simple.
+`make up` starts:
 
-## Documentation Map
+* PostgreSQL
+* Redis
+* Prometheus
+* OpenTelemetry Collector
+* Grafana
 
-- [Public showcase guide](docs/showcase.md)
-- [Public release readiness](docs/release-readiness.md)
-- [Architecture overview](docs/architecture/overview.md)
-- [Contribution guide](CONTRIBUTING.md)
-- [Security policy](SECURITY.md)
-- [SOC analytics](docs/architecture/soc-analytics.md)
-- [Detection engineering](docs/architecture/detection-engineering.md)
-- [Authentication and RBAC](docs/security/authentication-rbac.md)
-- [Observability](docs/operations/observability.md)
-- [Repository standards](docs/development/repository-standards.md)
+The API intentionally runs outside Docker during development to simplify:
 
-## Security Baseline
+* reload behavior;
+* debugger attachment;
+* structured logging visibility;
+* local troubleshooting.
 
-Helix Sentinel starts with defense-in-depth defaults: strict configuration validation, safe logging expectations, SQLAlchemy query construction, JWT-ready auth boundaries, RBAC-ready models, audit events, dependency scanning, and secret scanning. Offensive tooling and exploit functionality are intentionally out of scope.
+---
 
-Report vulnerabilities privately through the process in [SECURITY.md](SECURITY.md). Do not open public issues with exploit details, secrets, tokens, private tenant data, or proof-of-concept payloads.
+# Security Posture
 
-## Testing Rule
+Helix Sentinel includes:
 
-Every future module, endpoint, service, analytics pipeline, worker, or domain behavior must include corresponding tests in the same change. Feature additions without test updates are not accepted.
+* structured security logging;
+* audit event persistence;
+* dependency scanning;
+* secret scanning;
+* CI validation;
+* RBAC-ready foundations;
+* secure repository defaults;
+* deterministic operational workflows.
+
+The repository intentionally excludes:
+
+* offensive tooling;
+* exploit frameworks;
+* malware functionality;
+* attack automation;
+* credential harvesting;
+* weaponized payloads.
+
+## Security Tooling
+
+| Tool       | Purpose                  |
+| ---------- | ------------------------ |
+| Semgrep    | Static security analysis |
+| Gitleaks   | Secret scanning          |
+| Bandit     | Python security linting  |
+| Dependabot | Dependency monitoring    |
+| Ruff       | Python linting           |
+| MyPy       | Static typing validation |
+
+Report vulnerabilities privately through the process documented in:
+
+```text
+SECURITY.md
+```
+
+---
+
+# Documentation
+
+## Public Documentation
+
+* [Showcase Guide](docs/showcase.md)
+* [Release Readiness](docs/release-readiness.md)
+* [Contribution Guide](CONTRIBUTING.md)
+* [Security Policy](SECURITY.md)
+
+## Architecture Documentation
+
+* [Architecture Overview](docs/architecture/overview.md)
+* [SOC Analytics](docs/architecture/soc-analytics.md)
+* [Detection Engineering](docs/architecture/detection-engineering.md)
+* [Authentication and RBAC](docs/security/authentication-rbac.md)
+* [Observability](docs/operations/observability.md)
+
+## Development Standards
+
+* [Local Setup](docs/development/local-setup.md)
+* [Repository Standards](docs/development/repository-standards.md)
+
+---
+
+# Testing Philosophy
+
+Every feature addition must include:
+
+* automated tests;
+* validation updates;
+* type safety maintenance;
+* security validation when applicable.
+
+Feature additions without corresponding test updates are intentionally rejected.
+
+---
+
+# Current Scope Boundaries
+
+Helix Sentinel intentionally remains a focused operational security platform.
+
+The current repository does not attempt to provide:
+
+* enterprise SIEM scale;
+* realtime distributed ingestion;
+* multi-cluster orchestration;
+* compliance governance tooling;
+* advanced graph investigation;
+* autonomous response systems;
+* ML training pipelines;
+* customer multi-org tenancy.
+
+Those exclusions are intentional architectural decisions, not missing features.
+
+---
+
+# Ideal Evaluation Path
+
+For recruiters, reviewers, or engineering evaluators:
+
+1. Run the backend and frontend locally
+2. Open the SOC dashboard
+3. Review executive posture visibility
+4. Select an alert from the operational queue
+5. Inspect the investigation context
+6. Review bounded event pivots
+7. Acknowledge or close an alert
+8. Inspect audit-backed activity visibility
+9. Review the architecture documentation
+10. Run `make release-check`
+
+This path demonstrates:
+
+* persisted operational workflows;
+* deterministic backend analytics;
+* typed backend engineering;
+* auditability;
+* security-first architecture;
+* observability;
+* operational SOC UX design.
+
+---
+
+# Contribution
+
+Contributions should preserve:
+
+* typed boundaries;
+* deterministic workflows;
+* operational realism;
+* security posture;
+* architectural simplicity.
+
+Before contributing, review:
+
+* `CONTRIBUTING.md`
+* `SECURITY.md`
+* repository validation requirements
+
+---
+
+# License
+
+Add a public license before broad public distribution.
+
+Recommended:
+
+* MIT
+* Apache-2.0
+* BSD-3-Clause
+
+---
+
+# Final Notes
+
+Helix Sentinel is intentionally designed as a realistic engineering-focused security platform rather than a tutorial project or marketing demo.
+
+The emphasis of the repository is:
+
+* operational clarity;
+* maintainable backend architecture;
+* security engineering maturity;
+* observability;
+* realistic SOC workflows;
+* deterministic analytics;
+* practical DevSecOps discipline.

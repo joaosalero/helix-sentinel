@@ -1,12 +1,31 @@
 rules:
   - id: helix-no-secret-logging
-    message: Avoid logging secret-like variables.
+    message: Avoid logging secret-like values.
     severity: WARNING
     languages: [python]
     pattern-either:
-      - pattern: logger.$METHOD(..., $SECRET, ...)
-      - pattern: logging.$METHOD(..., $SECRET, ...)
-    metavariable-regex:
-      metavariable: $SECRET
-      regex: (?i).*(secret|token|password|credential).*
-
+      - patterns:
+          - pattern-either:
+              - pattern: logger.$METHOD($MESSAGE, ..., $SECRET, ...)
+              - pattern: logging.$METHOD($MESSAGE, ..., $SECRET, ...)
+          - pattern-not: logger.$METHOD(..., extra=..., ...)
+          - pattern-not: logging.$METHOD(..., extra=..., ...)
+          - pattern-not-regex: extra\s*=
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(debug|info|warning|warn|error|exception|critical|log)$
+          - metavariable-regex:
+              metavariable: $SECRET
+              regex: (?i)(^|.*[._-])(secret|password|passwd|pwd|token|access[_-]?token|refresh[_-]?token|auth[_-]?token|id[_-]?token|bearer[_-]?token|credential|credentials|api[_-]?key|apikey|private[_-]?key|authorization|authorization[_-]?header|auth[_-]?header|bearer)$
+      - patterns:
+          - pattern-either:
+              - pattern: 'logger.$METHOD(..., extra={..., $KEY: $VALUE, ...}, ...)'
+              - pattern: 'logging.$METHOD(..., extra={..., $KEY: $VALUE, ...}, ...)'
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(debug|info|warning|warn|error|exception|critical|log)$
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i)^["']?(secret|password|passwd|pwd|token|access_token|refresh_token|credential|credentials|api[_-]?key|private[_-]?key|authorization|bearer)["']?$
+      - pattern-regex: >-
+          (?s)\b(?:logger|logging)\.(?:debug|info|warning|warn|error|exception|critical|log)\s*\([^)]*extra\s*=\s*\{[^}]*['"](?:secret|password|passwd|pwd|token|access_token|refresh_token|credential|credentials|api[_-]?key|private[_-]?key|authorization|bearer)['"]\s*:

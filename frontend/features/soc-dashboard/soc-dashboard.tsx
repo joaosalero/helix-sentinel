@@ -119,8 +119,15 @@ function AppShellHeader({
             {formatDate(periodStart)} - {formatDate(periodEnd)}
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
-          <ShieldAlert className="h-4 w-4 text-primary" aria-hidden="true" />
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-md border px-3 py-2",
+            postureTone(posture) === "danger" && "border-red-300 bg-red-50 text-red-900",
+            postureTone(posture) === "warning" && "border-amber-300 bg-amber-50 text-amber-900",
+            postureTone(posture) === "good" && "border-emerald-200 bg-emerald-50 text-emerald-900",
+          )}
+        >
+          <ShieldAlert className="h-4 w-4" aria-hidden="true" />
           <span className="text-sm font-medium capitalize">{posture}</span>
         </div>
       </div>
@@ -145,6 +152,17 @@ function ExecutiveStrip({ report }: { report: SocReport }) {
           </div>
         </div>
         <p className="mt-3 text-sm text-muted-foreground">{summary.summary}</p>
+        <div className="mt-4 h-2 rounded-sm bg-muted">
+          <div
+            className={cn(
+              "h-2 rounded-sm",
+              summary.risk_score >= 45 && "bg-red-600",
+              summary.risk_score >= 15 && summary.risk_score < 45 && "bg-amber-500",
+              summary.risk_score < 15 && "bg-emerald-600",
+            )}
+            style={{ width: `${Math.min(summary.risk_score, 100)}%` }}
+          />
+        </div>
         {summary.primary_driver ? (
           <p className="mt-2 truncate text-xs text-muted-foreground">
             Driver: {humanize(summary.primary_driver)}
@@ -224,7 +242,10 @@ function KpiGrid({ report }: { report: SocReport }) {
 function OperationalTables({ report }: { report: SocReport }) {
   return (
     <section className="grid gap-5 xl:grid-cols-2">
-      <Panel title="Source Coverage">
+      <Panel
+        title="Source Coverage"
+        subtitle={`${formatNumber(report.executive_summary.active_sources)} active sources`}
+      >
         <div className="space-y-3">
           {report.top_sources.length === 0 ? (
             <EmptyLine text="No event sources reported in this window." />
@@ -241,7 +262,7 @@ function OperationalTables({ report }: { report: SocReport }) {
                   <div
                     className="h-2 rounded-sm bg-primary"
                     style={{
-                      width: `${Math.min(source.high_or_critical_events * 18, 100)}%`,
+                      width: `${sourceSeverityWidth(source)}%`,
                     }}
                   />
                 </div>
@@ -253,7 +274,7 @@ function OperationalTables({ report }: { report: SocReport }) {
           )}
         </div>
       </Panel>
-      <Panel title="Severity Distribution">
+      <Panel title="Severity Distribution" subtitle="Normalized event severity">
         <div className="space-y-3">
           {report.severity_distribution.length === 0 ? (
             <EmptyLine text="No severity distribution returned." />
@@ -290,7 +311,7 @@ function DetectionCoveragePanel({
   const topTechnique = data.top_techniques[0];
 
   return (
-    <Panel title="Detection Coverage">
+    <Panel title="Detection Coverage" subtitle="Rule efficacy and ATT&CK mapping">
       <div className="grid gap-3 md:grid-cols-4">
         <KpiBlock label="Mapped rules" value={formatPercent(data.coverage_ratio)} />
         <KpiBlock label="Techniques" value={formatNumber(data.techniques_covered)} />
@@ -367,7 +388,7 @@ function SecurityActivityPanel({
 
   const data = activity.data;
   return (
-    <Panel title="Security Activity">
+    <Panel title="Security Activity" subtitle="Audit-backed operational oversight">
       <div className="grid gap-3 md:grid-cols-4">
         <KpiBlock label="Audit events" value={formatNumber(data.total_audit_events)} />
         <KpiBlock
@@ -528,7 +549,7 @@ function RuleEfficacyRow({ rule }: { rule: DetectionRuleEfficacy }) {
 
 function FindingsPanel({ findings }: { findings: ReportingFinding[] }) {
   return (
-    <Panel title="Priority Findings">
+    <Panel title="Priority Findings" subtitle="Deterministic report drivers">
       <div className="space-y-3">
         {findings.length === 0 ? (
           <EmptyLine text="No prioritized findings in this reporting window." />
@@ -562,7 +583,7 @@ function AlertQueuePanel({
   tenantId?: string;
 }) {
   return (
-    <Panel title="Open Alert Queue">
+    <Panel title="Open Alert Queue" subtitle="Persisted alerts awaiting triage">
       {error ? (
         <EmptyLine text={error} />
       ) : (
@@ -611,14 +632,14 @@ function InvestigationPanel({
 }) {
   if (alert === null) {
     return (
-      <Panel title="Investigation Detail">
+      <Panel title="Investigation Detail" subtitle="Selected alert context">
         <EmptyLine text="Select an alert from the queue to review investigation context." />
       </Panel>
     );
   }
   if (!alert.data) {
     return (
-      <Panel title="Investigation Detail">
+      <Panel title="Investigation Detail" subtitle="Selected alert context">
         <EmptyLine text={alert.error ?? "Alert detail was not returned."} />
       </Panel>
     );
@@ -629,7 +650,7 @@ function InvestigationPanel({
   const canClose = item.status === "open" || item.status === "acknowledged";
 
   return (
-    <Panel title="Investigation Detail">
+    <Panel title="Investigation Detail" subtitle="Selected alert context">
       <div className="space-y-4">
         <div className="rounded-md border border-border p-3">
           <div className="flex items-start justify-between gap-3">
@@ -920,14 +941,23 @@ function KpiBlock({ label, value }: { label: string; value: string }) {
 
 function Panel({
   title,
+  subtitle,
   children,
 }: {
   title: string;
+  subtitle?: string;
   children: ReactNode;
 }) {
   return (
     <section className="rounded-md border border-border bg-white p-4">
-      <h2 className="text-sm font-semibold">{title}</h2>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {subtitle ? (
+          <span className="max-w-[55%] truncate text-right text-xs text-muted-foreground">
+            {subtitle}
+          </span>
+        ) : null}
+      </div>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -950,7 +980,7 @@ function DistributionRow({
       </div>
       <div className="mt-2 h-2 rounded-sm bg-muted">
         <div
-          className="h-2 rounded-sm bg-slate-700"
+          className={cn("h-2 rounded-sm", severityBarClass(label))}
           style={{ width: `${Math.min(percentage, 100)}%` }}
         />
       </div>
@@ -976,7 +1006,11 @@ function SeverityBadge({ severity }: { severity: string }) {
 }
 
 function EmptyLine({ text }: { text: string }) {
-  return <p className="text-sm text-muted-foreground">{text}</p>;
+  return (
+    <div className="rounded-md border border-dashed border-border bg-muted/50 px-3 py-2">
+      <p className="text-sm text-muted-foreground">{text}</p>
+    </div>
+  );
 }
 
 function UnavailableState({ message, status }: { message: string; status: number }) {
@@ -1030,6 +1064,36 @@ function formatTime(value: string): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function postureTone(posture: string): "danger" | "warning" | "good" {
+  if (posture === "elevated") {
+    return "danger";
+  }
+  if (posture === "guarded") {
+    return "warning";
+  }
+  return "good";
+}
+
+function sourceSeverityWidth(source: { total_events: number; high_or_critical_events: number }) {
+  if (source.total_events <= 0) {
+    return 0;
+  }
+  return Math.min((source.high_or_critical_events / source.total_events) * 100, 100);
+}
+
+function severityBarClass(severity: string): string {
+  if (severity === "critical") {
+    return "bg-red-600";
+  }
+  if (severity === "high") {
+    return "bg-amber-500";
+  }
+  if (severity === "medium") {
+    return "bg-sky-500";
+  }
+  return "bg-slate-600";
 }
 
 function humanize(value: string): string {

@@ -21,6 +21,16 @@ scripts/        Local bootstrap and validation helpers
 .github/        CI, security workflows, and contribution templates
 ```
 
+## Showcase Surfaces
+
+The current public-facing experience centers on an operational SOC dashboard, not a marketing page. It demonstrates:
+
+- Executive security posture, risk drivers, and consolidated SOC KPIs.
+- Open alert queues, investigation detail, and contextual event timelines.
+- Detection coverage, ATT&CK activity, and rule efficacy summaries.
+- Audit-backed security activity, actor concentration, and recent audit trail visibility.
+- Prometheus/Grafana-ready operational observability.
+
 ## Local Setup
 
 Prerequisites:

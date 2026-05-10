@@ -62,7 +62,11 @@ export function SocDashboard({
 
   return (
     <main className="min-h-screen bg-background">
-      <AppShellHeader posture={data.executive_summary.posture} />
+      <AppShellHeader
+        periodEnd={data.period_end}
+        periodStart={data.period_start}
+        posture={data.executive_summary.posture}
+      />
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-5">
         <ExecutiveStrip report={data} />
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
@@ -92,7 +96,15 @@ export function SocDashboard({
   );
 }
 
-function AppShellHeader({ posture }: { posture: string }) {
+function AppShellHeader({
+  posture,
+  periodStart,
+  periodEnd,
+}: {
+  posture: string;
+  periodStart: string;
+  periodEnd: string;
+}) {
   return (
     <header className="border-b border-border bg-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
@@ -103,6 +115,9 @@ function AppShellHeader({ posture }: { posture: string }) {
           <h1 className="truncate text-xl font-semibold text-foreground">
             SOC Operations
           </h1>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {formatDate(periodStart)} - {formatDate(periodEnd)}
+          </p>
         </div>
         <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
           <ShieldAlert className="h-4 w-4 text-primary" aria-hidden="true" />
@@ -211,39 +226,47 @@ function OperationalTables({ report }: { report: SocReport }) {
     <section className="grid gap-5 xl:grid-cols-2">
       <Panel title="Source Coverage">
         <div className="space-y-3">
-          {report.top_sources.map((source) => (
-            <div key={source.source} className="rounded-md border border-border p-3">
-              <div className="flex items-center justify-between gap-3">
-                <span className="truncate text-sm font-medium">{source.source}</span>
-                <span className="text-sm text-muted-foreground">
-                  {formatNumber(source.total_events)}
-                </span>
+          {report.top_sources.length === 0 ? (
+            <EmptyLine text="No event sources reported in this window." />
+          ) : (
+            report.top_sources.map((source) => (
+              <div key={source.source} className="rounded-md border border-border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="truncate text-sm font-medium">{source.source}</span>
+                  <span className="text-sm text-muted-foreground">
+                    {formatNumber(source.total_events)}
+                  </span>
+                </div>
+                <div className="mt-2 h-2 rounded-sm bg-muted">
+                  <div
+                    className="h-2 rounded-sm bg-primary"
+                    style={{
+                      width: `${Math.min(source.high_or_critical_events * 18, 100)}%`,
+                    }}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {formatNumber(source.high_or_critical_events)} high or critical
+                </p>
               </div>
-              <div className="mt-2 h-2 rounded-sm bg-muted">
-                <div
-                  className="h-2 rounded-sm bg-primary"
-                  style={{
-                    width: `${Math.min(source.high_or_critical_events * 18, 100)}%`,
-                  }}
-                />
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {formatNumber(source.high_or_critical_events)} high or critical
-              </p>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </Panel>
       <Panel title="Severity Distribution">
         <div className="space-y-3">
-          {report.severity_distribution.map((item) => (
-            <DistributionRow
-              key={item.name}
-              label={item.name}
-              count={item.count}
-              percentage={item.percentage}
-            />
-          ))}
+          {report.severity_distribution.length === 0 ? (
+            <EmptyLine text="No severity distribution returned." />
+          ) : (
+            report.severity_distribution.map((item) => (
+              <DistributionRow
+                key={item.name}
+                label={item.name}
+                count={item.count}
+                percentage={item.percentage}
+              />
+            ))
+          )}
         </div>
       </Panel>
     </section>
@@ -993,6 +1016,12 @@ function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
   }).format(new Date(value));
 }
 

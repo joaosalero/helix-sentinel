@@ -15,7 +15,7 @@ dependencies = [
   "opentelemetry-exporter-otlp>=1.25",
   "opentelemetry-sdk>=1.25",
   "opentelemetry-instrumentation-fastapi>=0.46b0",
-  "passlib[argon2]>=1.7",
+  "argon2-cffi>=23.1",
   "prometheus-client>=0.20",
   "pydantic-settings>=2.3",
   "pyjwt>=2.8",
@@ -50,10 +50,6 @@ python_version = "3.12"
 plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
 strict = true
 mypy_path = "backend"
-
-[[tool.mypy.overrides]]
-module = ["passlib.*"]
-ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["opentelemetry.exporter.otlp.*"]

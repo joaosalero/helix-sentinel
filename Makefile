@@ -1,6 +1,7 @@
-.PHONY: install test lint format typecheck security up down migrate
+.PHONY: install test lint format format-check typecheck security frontend-lint frontend-typecheck check up down migrate
 
 install:
+	python -m pip install --upgrade "pip>=26.1"
 	python -m pip install -e ".[dev,security]"
 
 test:
@@ -12,12 +13,23 @@ lint:
 format:
 	ruff format backend
 
+format-check:
+	ruff format --check backend
+
 typecheck:
 	mypy backend
 
 security:
 	bandit -r backend -x backend/tests
-	pip-audit
+	pip-audit --skip-editable
+
+frontend-lint:
+	npm --prefix frontend run lint
+
+frontend-typecheck:
+	npm --prefix frontend run typecheck
+
+check: lint format-check typecheck test security frontend-lint frontend-typecheck
 
 up:
 	docker compose up -d postgres redis prometheus otel-collector grafana

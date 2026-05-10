@@ -11,6 +11,8 @@ Helix Sentinel follows an OWASP ASVS-oriented baseline:
 - CORS and security headers configured through middleware.
 - Secret scanning, dependency scanning, and static security analysis prepared in CI.
 
+Public vulnerability reporting is handled through the repository security policy. Reports should not be filed as public issues when they include exploit details, secrets, tokens, private tenant data, or proof-of-concept payloads.
+
 The authentication foundation adds separate access and refresh token secrets,
 Argon2 password verification, role and permission guards, token `jti` claims for
 future refresh-token rotation, and structured audit events for authentication and

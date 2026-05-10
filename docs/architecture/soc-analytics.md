@@ -27,6 +27,7 @@ Analytics endpoints live under `/api/v1/analytics` and require `analytics:read`.
 - `/sources`: paginated source metrics.
 - `/events`: bounded normalized event retrieval for analyst investigations.
 - `/report`: executive and analyst SOC reporting summary.
+- `/security-activity`: bounded operational audit activity summary requiring `analytics:read` and `audit:read`.
 
 ## Filtering
 
@@ -47,7 +48,9 @@ Database-backed analytics uses SQL aggregation over normalized event records for
 
 JSONB fields are used only for targeted actor, asset, and IOC filters on bounded event retrieval. Aggregation APIs still avoid payload-level aggregation and operate on normalized scalar columns first.
 
-SOC reports compose existing bounded repositories instead of introducing a reporting warehouse. Event aggregations come from normalized event analytics, alert workflow KPIs come from detection alert repositories, and threat/AI sections reuse deterministic summary services.
+SOC reports compose existing bounded repositories instead of introducing a reporting warehouse. Event aggregations come from normalized event analytics, alert workflow KPIs come from detection alert repositories, detection posture comes from coverage analytics when available, and threat/AI sections reuse deterministic summary services. Executive posture uses deterministic risk drivers and consolidated operational KPIs; it is not a BI, compliance, or governance scoring system.
+
+Audit activity analytics use the existing append-only audit repository. They aggregate action/outcome counts, authentication outcomes, authorization denials, investigation workflow transitions, actor concentration, ingestion rejections, and bounded recent activity. Tenant filtering is based on sanitized audit metadata populated only where the audited operation already has an authoritative tenant context. Login failures without an authoritative tenant remain unscoped rather than inferred.
 
 ## Observability
 

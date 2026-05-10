@@ -10,6 +10,7 @@ from app.analytics.schemas import (
     AlertWorkflowKpis,
     AnalyticsFilter,
     CountSummary,
+    ExecutiveOperationalKpis,
     ExecutiveSecuritySummary,
     OperationalKpis,
     ReportingFinding,
@@ -17,6 +18,7 @@ from app.analytics.schemas import (
     SocReport,
 )
 from app.detections.repositories import AlertReportingSnapshot
+from app.detections.schemas import DetectionCoverageSummary
 from app.events.taxonomy import EventCategory, EventSeverity
 from app.threats.schemas import ThreatSummary
 
@@ -99,6 +101,7 @@ class SocAnalyticsService:
         threat_summary: ThreatSummary,
         ai_summary: AIAnalyticsSummary,
         correlation_id: str | None,
+        detection_coverage: DetectionCoverageSummary | None = None,
     ) -> SocReport:
         """Build an executive and analyst-oriented SOC report."""
         started = perf_counter()
@@ -114,6 +117,21 @@ class SocAnalyticsService:
             {EventSeverity.HIGH.value, EventSeverity.CRITICAL.value},
         )
         alert_workflow = _alert_workflow_kpis(alert_snapshot)
+        executive_kpis = _executive_kpis(
+            operational_kpis=kpis,
+            alert_workflow=alert_workflow,
+            threat_summary=threat_summary,
+            ai_summary=ai_summary,
+            detection_coverage=detection_coverage,
+        )
+        findings = _report_findings(
+            high_or_critical_events=high_count,
+            total_events=total_events,
+            alert_workflow=alert_workflow,
+            threat_summary=threat_summary,
+            ai_summary=ai_summary,
+            detection_coverage=detection_coverage,
+        )
         executive = _executive_summary(
             total_events=total_events,
             high_or_critical_events=high_count,
@@ -121,6 +139,8 @@ class SocAnalyticsService:
             threat_summary=threat_summary,
             ai_summary=ai_summary,
             active_sources=len(sources),
+            executive_kpis=executive_kpis,
+            findings=findings,
         )
         elapsed = perf_counter() - started
         analytics_query_duration_seconds.labels(operation="report").observe(elapsed)
@@ -139,18 +159,13 @@ class SocAnalyticsService:
             executive_summary=executive,
             operational_kpis=kpis,
             alert_workflow=alert_workflow,
+            executive_kpis=executive_kpis,
             severity_distribution=severity,
             category_distribution=categories,
             top_sources=sources,
             threat_summary=threat_summary,
             ai_summary=ai_summary,
-            findings=_report_findings(
-                high_or_critical_events=high_count,
-                total_events=total_events,
-                alert_workflow=alert_workflow,
-                threat_summary=threat_summary,
-                ai_summary=ai_summary,
-            ),
+            findings=findings,
         )
 
 
@@ -183,15 +198,17 @@ def _executive_summary(
     threat_summary: ThreatSummary,
     ai_summary: AIAnalyticsSummary,
     active_sources: int,
+    executive_kpis: ExecutiveOperationalKpis,
+    findings: list[ReportingFinding],
 ) -> ExecutiveSecuritySummary:
-    posture = _posture(
-        high_or_critical_alerts=alert_workflow.high_or_critical_alerts,
-        open_alerts=alert_workflow.open_alerts,
-        high_or_critical_threats=threat_summary.high_or_critical,
-        high_confidence_ai=ai_summary.high_confidence,
-    )
+    risk_score = _risk_score(executive_kpis)
+    posture = _posture(risk_score)
+    primary_driver = findings[0].name if findings else None
     return ExecutiveSecuritySummary(
         posture=posture,
+        risk_score=risk_score,
+        summary=_posture_summary(posture),
+        primary_driver=primary_driver,
         total_events=total_events,
         high_or_critical_events=high_or_critical_events,
         alert_volume=alert_workflow.alert_volume,
@@ -205,18 +222,66 @@ def _executive_summary(
     )
 
 
-def _posture(
+def _executive_kpis(
     *,
-    high_or_critical_alerts: int,
-    open_alerts: int,
-    high_or_critical_threats: int,
-    high_confidence_ai: int,
-) -> str:
-    if high_or_critical_alerts or high_or_critical_threats >= 3:
+    operational_kpis: OperationalKpis,
+    alert_workflow: AlertWorkflowKpis,
+    threat_summary: ThreatSummary,
+    ai_summary: AIAnalyticsSummary,
+    detection_coverage: DetectionCoverageSummary | None,
+) -> ExecutiveOperationalKpis:
+    closed_or_open = alert_workflow.closed_alerts + alert_workflow.open_alerts
+    return ExecutiveOperationalKpis(
+        high_severity_ratio=operational_kpis.high_severity_ratio,
+        authentication_failure_ratio=operational_kpis.authentication_failure_ratio,
+        alert_closure_ratio=(
+            round(alert_workflow.closed_alerts / closed_or_open, 4) if closed_or_open else 0.0
+        ),
+        open_alerts=alert_workflow.open_alerts,
+        unassigned_open_alerts=alert_workflow.unassigned_open_alerts,
+        mtta_minutes=alert_workflow.mtta_minutes,
+        mttr_minutes=alert_workflow.mttr_minutes,
+        true_positive_rate=alert_workflow.true_positive_rate,
+        detection_coverage_ratio=(
+            detection_coverage.coverage_ratio if detection_coverage is not None else None
+        ),
+        silent_active_rules=(
+            detection_coverage.silent_active_rules if detection_coverage is not None else None
+        ),
+        high_or_critical_threat_insights=threat_summary.high_or_critical,
+        high_confidence_ai_anomalies=ai_summary.high_confidence,
+    )
+
+
+def _risk_score(kpis: ExecutiveOperationalKpis) -> int:
+    score = 0
+    score += min(kpis.open_alerts * 8, 24)
+    score += min(kpis.unassigned_open_alerts * 6, 18)
+    score += min(kpis.high_or_critical_threat_insights * 12, 24)
+    score += min(kpis.high_confidence_ai_anomalies * 8, 16)
+    score += round(kpis.high_severity_ratio * 20)
+    score += round(kpis.authentication_failure_ratio * 15)
+    if kpis.detection_coverage_ratio is not None and kpis.detection_coverage_ratio < 0.5:
+        score += 10
+    if kpis.silent_active_rules:
+        score += min(kpis.silent_active_rules * 2, 10)
+    return min(score, 100)
+
+
+def _posture(risk_score: int) -> str:
+    if risk_score >= 45:
         return "elevated"
-    if open_alerts or high_confidence_ai:
+    if risk_score >= 15:
         return "guarded"
     return "nominal"
+
+
+def _posture_summary(posture: str) -> str:
+    if posture == "elevated":
+        return "Material security activity requires leadership awareness and SOC follow-through."
+    if posture == "guarded":
+        return "Operational risk is present but currently bounded by active SOC workflows."
+    return "No material SOC posture pressure is visible in the reporting window."
 
 
 def _report_findings(
@@ -226,6 +291,7 @@ def _report_findings(
     alert_workflow: AlertWorkflowKpis,
     threat_summary: ThreatSummary,
     ai_summary: AIAnalyticsSummary,
+    detection_coverage: DetectionCoverageSummary | None = None,
 ) -> list[ReportingFinding]:
     findings: list[ReportingFinding] = []
     if high_or_critical_events:
@@ -262,6 +328,24 @@ def _report_findings(
                 severity="medium",
                 count=ai_summary.high_confidence,
                 reason="Deterministic AI analytics generated high-confidence anomalies.",
+            )
+        )
+    if detection_coverage is not None and detection_coverage.coverage_ratio < 0.5:
+        findings.append(
+            ReportingFinding(
+                name="low_detection_mapping",
+                severity="medium",
+                count=detection_coverage.unmapped_rules,
+                reason="Less than half of detection rules are mapped to ATT&CK techniques.",
+            )
+        )
+    if detection_coverage is not None and detection_coverage.silent_active_rules:
+        findings.append(
+            ReportingFinding(
+                name="silent_active_rules",
+                severity="medium",
+                count=detection_coverage.silent_active_rules,
+                reason="Active detection rules produced no alerts in the report window.",
             )
         )
     if total_events == 0:

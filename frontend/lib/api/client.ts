@@ -5,6 +5,7 @@ import type {
   DetectionAlertListResponse,
   DetectionCoverageSummary,
   EventSearchResponse,
+  SecurityActivitySummary,
   SocReport,
 } from "@/lib/api/types";
 
@@ -84,6 +85,15 @@ export function getSocReport(query: {
   tenant_id?: string;
 }): Promise<ApiResult<SocReport>> {
   return requestJson<SocReport>("/analytics/report", query);
+}
+
+export function getSecurityActivity(query: {
+  start_time: string;
+  end_time: string;
+  tenant_id?: string;
+  limit?: number;
+}): Promise<ApiResult<SecurityActivitySummary>> {
+  return requestJson<SecurityActivitySummary>("/analytics/security-activity", query);
 }
 
 export function getOpenAlerts(query: {

@@ -43,6 +43,7 @@ class EventIngestionService:
                 "category": normalized.category.value,
                 "severity": normalized.severity.value,
                 "source": normalized.source_name,
+                "tenant_id": normalized.tenant_id,
             },
         )
         logger.info(
@@ -61,4 +62,3 @@ class EventIngestionService:
             severity=normalized.severity,
             correlation_id=correlation_id,
         )
-

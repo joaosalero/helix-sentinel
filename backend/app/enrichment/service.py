@@ -137,6 +137,7 @@ class IOCEnrichmentService:
                 "event_count": len(events),
                 "match_count": len(matches),
                 "elapsed_ms": round(elapsed * 1000, 2),
+                "tenant_id": request.tenant_id,
             },
         )
         logger.info(

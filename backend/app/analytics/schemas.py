@@ -130,6 +130,23 @@ class OperationalKpis(BaseModel):
     events_per_source: float
 
 
+class ExecutiveOperationalKpis(BaseModel):
+    """Consolidated leadership-facing SOC KPI summary."""
+
+    high_severity_ratio: float
+    authentication_failure_ratio: float
+    alert_closure_ratio: float
+    open_alerts: int
+    unassigned_open_alerts: int
+    mtta_minutes: float | None = None
+    mttr_minutes: float | None = None
+    true_positive_rate: float | None = None
+    detection_coverage_ratio: float | None = None
+    silent_active_rules: int | None = None
+    high_or_critical_threat_insights: int
+    high_confidence_ai_anomalies: int
+
+
 class AlertWorkflowKpis(BaseModel):
     """Persisted alert workflow KPIs for SOC reporting."""
 
@@ -150,6 +167,9 @@ class ExecutiveSecuritySummary(BaseModel):
     """Executive-ready security posture summary."""
 
     posture: str
+    risk_score: int
+    summary: str
+    primary_driver: str | None = None
     total_events: int
     high_or_critical_events: int
     alert_volume: int
@@ -179,6 +199,7 @@ class SocReport(BaseModel):
     executive_summary: ExecutiveSecuritySummary
     operational_kpis: OperationalKpis
     alert_workflow: AlertWorkflowKpis
+    executive_kpis: ExecutiveOperationalKpis
     severity_distribution: list[CountSummary]
     category_distribution: list[CountSummary]
     top_sources: list[SourceMetric]

@@ -143,7 +143,7 @@ async def ensure_roles_for_request(
         actor_id=principal.id,
         actor_email=principal.email,
         correlation_id=getattr(request.state, "correlation_id", None),
-        metadata={"required_roles": sorted(required_roles)},
+        metadata={"required_roles": sorted(required_roles), "tenant_id": principal.tenant_id},
     )
     raise AuthorizationError
 
@@ -162,7 +162,10 @@ async def ensure_permissions_for_request(
         actor_id=principal.id,
         actor_email=principal.email,
         correlation_id=getattr(request.state, "correlation_id", None),
-        metadata={"required_permissions": sorted(required_permissions)},
+        metadata={
+            "required_permissions": sorted(required_permissions),
+            "tenant_id": principal.tenant_id,
+        },
     )
     raise AuthorizationError
 
@@ -186,6 +189,7 @@ async def resolve_tenant_scope_for_request(
         metadata={
             "requested_tenant_id": requested_tenant_id,
             "principal_tenant_id": principal.tenant_id,
+            "tenant_id": principal.tenant_id,
         },
     )
     raise AuthorizationError
@@ -207,7 +211,7 @@ def require_roles(*required_roles: str) -> Callable[..., Awaitable[Principal]]:
             actor_id=principal.id,
             actor_email=principal.email,
             correlation_id=getattr(request.state, "correlation_id", None),
-            metadata={"required_roles": list(required_roles)},
+            metadata={"required_roles": list(required_roles), "tenant_id": principal.tenant_id},
         )
         raise AuthorizationError
 
@@ -230,7 +234,10 @@ def require_permissions(*required_permissions: str) -> Callable[..., Awaitable[P
             actor_id=principal.id,
             actor_email=principal.email,
             correlation_id=getattr(request.state, "correlation_id", None),
-            metadata={"required_permissions": list(required_permissions)},
+            metadata={
+                "required_permissions": list(required_permissions),
+                "tenant_id": principal.tenant_id,
+            },
         )
         raise AuthorizationError
 

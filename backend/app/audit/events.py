@@ -1,5 +1,6 @@
 """Structured audit event definitions for authentication and authorization."""
 
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
@@ -40,3 +41,4 @@ class AuditEventCreate(BaseModel):
     resource: str | None = None
     correlation_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

@@ -76,6 +76,7 @@ class AuthenticationService:
             actor_id=user.id,
             actor_email=user.email,
             correlation_id=correlation_id,
+            metadata={"tenant_id": user.tenant_id},
         )
         return token_pair
 
@@ -104,7 +105,7 @@ class AuthenticationService:
             actor_id=user.id,
             actor_email=user.email,
             correlation_id=correlation_id,
-            metadata={"previous_token_id": claims.token_id},
+            metadata={"previous_token_id": claims.token_id, "tenant_id": user.tenant_id},
         )
         return token_pair
 
@@ -120,6 +121,7 @@ class AuthenticationService:
             actor_id=actor.id,
             actor_email=actor.email,
             correlation_id=correlation_id,
+            metadata={"tenant_id": actor.tenant_id},
         )
 
     def _issue_token_pair(self, principal: Principal) -> TokenPair:

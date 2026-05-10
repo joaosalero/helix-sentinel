@@ -16,7 +16,10 @@ from app.api.routes.analytics import _analytics_repository
 from app.auth.rbac import permissions_for_roles
 from app.core.config.settings import SecuritySettings
 from app.core.security.passwords import hash_password
-from app.detections.repositories import InMemoryDetectionAlertRepository
+from app.detections.repositories import (
+    InMemoryDetectionAlertRepository,
+    InMemoryDetectionRuleRepository,
+)
 from app.detections.schemas import DetectionAlert, DetectionAlertStatus
 from app.detections.taxonomy import DetectionCategory, DetectionSeverity
 from app.events.repositories import InMemoryEventRepository, PostgresEventRepository
@@ -175,6 +178,7 @@ async def analytics_context() -> AsyncIterator[AnalyticsApiContext]:
     app = create_security_app()
     app.state.event_repository = event_repository
     app.state.detection_alert_repository = alert_repository
+    app.state.detection_rule_repository = InMemoryDetectionRuleRepository()
     app.state.user_repository = InMemoryUserRepository([analyst, denied])
     app.state.security_settings = SecuritySettings(
         environment="test",
@@ -288,10 +292,44 @@ async def test_report_endpoint_returns_soc_reporting_aggregates(
     body = response.json()
     assert body["executive_summary"]["alert_volume"] == 2
     assert body["executive_summary"]["open_alerts"] == 1
+    assert body["executive_summary"]["risk_score"] > 0
+    assert body["executive_summary"]["summary"]
+    assert body["executive_kpis"]["open_alerts"] == 1
+    assert body["executive_kpis"]["alert_closure_ratio"] == 0.5
     assert body["alert_workflow"]["true_positive_rate"] == 1.0
     assert body["threat_summary"]["total_insights"] >= 1
     assert body["ai_summary"]["total_anomalies"] >= 1
     assert body["findings"]
+
+
+async def test_security_activity_endpoint_returns_audit_aggregates(
+    analytics_context: AnalyticsApiContext,
+) -> None:
+    response = await analytics_context.client.get(
+        "/api/v1/analytics/security-activity",
+        headers={"Authorization": f"Bearer {analytics_context.analyst_token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["successful_authentications"] >= 1
+    assert body["authentication"]["successes"] >= 1
+    assert body["authorization"]["permission_denials"] == 0
+    assert body["investigations"]["workflow_updates"] == 0
+    assert body["total_audit_events"] >= body["successful_authentications"]
+    assert body["actions"]
+    assert body["recent_activity"]
+
+
+async def test_security_activity_endpoint_requires_audit_permission(
+    analytics_context: AnalyticsApiContext,
+) -> None:
+    response = await analytics_context.client.get(
+        "/api/v1/analytics/security-activity",
+        headers={"Authorization": f"Bearer {analytics_context.denied_token}"},
+    )
+
+    assert response.status_code == 403
 
 
 async def test_event_search_supports_investigation_filters(

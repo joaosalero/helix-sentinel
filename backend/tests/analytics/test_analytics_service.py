@@ -10,6 +10,7 @@ from app.analytics.repositories import InMemoryAnalyticsRepository
 from app.analytics.schemas import AnalyticsFilter, TrendBucket
 from app.analytics.service import SocAnalyticsService
 from app.detections.repositories import AlertReportingSnapshot
+from app.detections.schemas import DetectionCoverageSummary
 from app.events.schemas import NormalizedEvent
 from app.events.taxonomy import EventCategory, EventSeverity
 from app.threats.schemas import ThreatSummary
@@ -181,9 +182,31 @@ async def test_report_combines_event_alert_threat_and_ai_kpis(
             enriched_events=4,
         ),
         correlation_id="corr-report",
+        detection_coverage=DetectionCoverageSummary(
+            period_start=datetime(2026, 5, 6, tzinfo=UTC),
+            period_end=datetime(2026, 5, 10, tzinfo=UTC),
+            total_rules=4,
+            active_rules=3,
+            mapped_rules=1,
+            unmapped_rules=3,
+            active_mapped_rules=1,
+            techniques_covered=1,
+            tactics_covered=1,
+            coverage_ratio=0.25,
+            alerting_rules=1,
+            silent_active_rules=2,
+            total_alerts=3,
+            top_techniques=[],
+            tactic_coverage=[],
+            noisy_rules=[],
+            silent_rules=[],
+        ),
     )
 
     assert report.executive_summary.posture == "elevated"
+    assert report.executive_summary.risk_score > 0
+    assert report.executive_kpis.alert_closure_ratio == 0.5
+    assert report.executive_kpis.detection_coverage_ratio == 0.25
     assert report.alert_workflow.true_positive_rate == 1.0
     assert report.threat_summary.high_or_critical == 1
     assert report.ai_summary.high_confidence == 1
@@ -191,4 +214,6 @@ async def test_report_combines_event_alert_threat_and_ai_kpis(
         "open_alert_queue",
         "high_risk_threat_insights",
         "high_confidence_ai_anomalies",
+        "low_detection_mapping",
+        "silent_active_rules",
     }

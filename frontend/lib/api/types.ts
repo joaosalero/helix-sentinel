@@ -26,6 +26,21 @@ export type OperationalKpis = {
   events_per_source: number;
 };
 
+export type ExecutiveOperationalKpis = {
+  high_severity_ratio: number;
+  authentication_failure_ratio: number;
+  alert_closure_ratio: number;
+  open_alerts: number;
+  unassigned_open_alerts: number;
+  mtta_minutes: number | null;
+  mttr_minutes: number | null;
+  true_positive_rate: number | null;
+  detection_coverage_ratio: number | null;
+  silent_active_rules: number | null;
+  high_or_critical_threat_insights: number;
+  high_confidence_ai_anomalies: number;
+};
+
 export type AlertWorkflowKpis = {
   alert_volume: number;
   open_alerts: number;
@@ -42,6 +57,9 @@ export type AlertWorkflowKpis = {
 
 export type ExecutiveSecuritySummary = {
   posture: "nominal" | "guarded" | "elevated" | string;
+  risk_score: number;
+  summary: string;
+  primary_driver: string | null;
   total_events: number;
   high_or_critical_events: number;
   alert_volume: number;
@@ -59,6 +77,77 @@ export type ReportingFinding = {
   severity: "low" | "medium" | "high" | "critical" | string;
   count: number;
   reason: string;
+};
+
+export type AuditActionMetric = {
+  action: string;
+  outcome: string;
+  count: number;
+  last_seen: string | null;
+};
+
+export type AuditActorMetric = {
+  actor_id: string | null;
+  actor_email_hash: string | null;
+  count: number;
+  failure_count: number;
+  last_seen: string | null;
+};
+
+export type RecentAuditActivity = {
+  action: string;
+  outcome: string;
+  resource: string | null;
+  correlation_id: string | null;
+  created_at: string | null;
+};
+
+export type SecurityActivityFinding = {
+  name: string;
+  severity: "low" | "medium" | "high" | "critical" | string;
+  count: number;
+  reason: string;
+};
+
+export type AuthenticationActivitySummary = {
+  successes: number;
+  failures: number;
+  token_refreshes: number;
+  logouts: number;
+  user_state_rejections: number;
+  failure_ratio: number;
+};
+
+export type AuthorizationActivitySummary = {
+  permission_denials: number;
+  tenant_scope_denials: number;
+};
+
+export type InvestigationActivitySummary = {
+  workflow_updates: number;
+  acknowledgements: number;
+  closures: number;
+};
+
+export type SecurityActivitySummary = {
+  period_start: string;
+  period_end: string;
+  total_audit_events: number;
+  successful_authentications: number;
+  failed_authentications: number;
+  permission_denials: number;
+  tenant_scope_denials: number;
+  investigation_updates: number;
+  detection_rule_activity: number;
+  event_ingestion_rejections: number;
+  active_actor_count: number;
+  authentication: AuthenticationActivitySummary;
+  authorization: AuthorizationActivitySummary;
+  investigations: InvestigationActivitySummary;
+  actions: AuditActionMetric[];
+  top_actors: AuditActorMetric[];
+  recent_activity: RecentAuditActivity[];
+  findings: SecurityActivityFinding[];
 };
 
 export type ThreatSummary = {
@@ -86,6 +175,7 @@ export type SocReport = {
   executive_summary: ExecutiveSecuritySummary;
   operational_kpis: OperationalKpis;
   alert_workflow: AlertWorkflowKpis;
+  executive_kpis: ExecutiveOperationalKpis;
   severity_distribution: CountSummary[];
   category_distribution: CountSummary[];
   top_sources: SourceMetric[];

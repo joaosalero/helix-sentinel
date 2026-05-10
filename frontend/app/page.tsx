@@ -4,6 +4,7 @@ import {
   getDetectionCoverage,
   getInvestigationEvents,
   getOpenAlerts,
+  getSecurityActivity,
   getSocReport,
 } from "@/lib/api/client";
 import type { DetectionAlert } from "@/lib/api/types";
@@ -26,10 +27,11 @@ export default async function Home({ searchParams }: HomeProps) {
     tenant_id: searchParams?.tenant_id,
   };
 
-  const [report, alerts, coverage, selectedAlert] = await Promise.all([
+  const [report, alerts, coverage, securityActivity, selectedAlert] = await Promise.all([
     getSocReport(params),
     getOpenAlerts({ tenant_id: searchParams?.tenant_id, limit: 8 }),
     getDetectionCoverage({ ...params, limit: 6 }),
+    getSecurityActivity({ ...params, limit: 8 }),
     searchParams?.alert_id
       ? getAlert(searchParams.alert_id, { tenant_id: searchParams.tenant_id })
       : Promise.resolve(null),
@@ -44,6 +46,7 @@ export default async function Home({ searchParams }: HomeProps) {
       coverage={coverage}
       investigationEvents={investigationEvents}
       report={report}
+      securityActivity={securityActivity}
       selectedAlert={selectedAlert}
       tenantId={searchParams?.tenant_id}
     />

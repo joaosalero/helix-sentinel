@@ -1,13 +1,13 @@
 import {
   AlertTriangle,
   ArrowRight,
-  Brain,
   Clock3,
   Crosshair,
   FileText,
   GitBranch,
+  KeyRound,
+  LockKeyhole,
   type LucideIcon,
-  RadioTower,
   ShieldAlert,
   Siren,
 } from "lucide-react";
@@ -24,6 +24,7 @@ import type {
   EventSearchResponse,
   NormalizedEvent,
   ReportingFinding,
+  SecurityActivitySummary,
   SocReport,
 } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ type SocDashboardProps = {
   report: ApiResult<SocReport>;
   alerts: ApiResult<DetectionAlertListResponse>;
   coverage: ApiResult<DetectionCoverageSummary>;
+  securityActivity: ApiResult<SecurityActivitySummary>;
   selectedAlert: ApiResult<DetectionAlert> | null;
   investigationEvents: ApiResult<EventSearchResponse> | null;
   tenantId?: string;
@@ -41,6 +43,7 @@ export function SocDashboard({
   report,
   alerts,
   coverage,
+  securityActivity,
   selectedAlert,
   investigationEvents,
   tenantId,
@@ -66,6 +69,7 @@ export function SocDashboard({
           <section className="flex min-w-0 flex-col gap-5">
             <KpiGrid report={data} />
             <DetectionCoveragePanel coverage={coverage} />
+            <SecurityActivityPanel activity={securityActivity} />
             <OperationalTables report={data} />
           </section>
           <aside className="flex min-w-0 flex-col gap-5">
@@ -111,62 +115,92 @@ function AppShellHeader({ posture }: { posture: string }) {
 
 function ExecutiveStrip({ report }: { report: SocReport }) {
   const summary = report.executive_summary;
+  const kpis = report.executive_kpis;
   return (
-    <section className="grid gap-3 md:grid-cols-4">
-      <MetricCard
-        icon={RadioTower}
-        label="Events"
-        value={formatNumber(summary.total_events)}
-        tone="neutral"
-      />
+    <section className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_repeat(3,minmax(0,1fr))]">
+      <article className="rounded-md border border-border bg-white p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm text-muted-foreground">Executive posture</p>
+            <p className="mt-2 text-2xl font-semibold capitalize">{summary.posture}</p>
+          </div>
+          <div className="rounded-md border border-border px-3 py-2 text-right">
+            <p className="text-xs text-muted-foreground">Risk</p>
+            <p className="text-lg font-semibold">{summary.risk_score}</p>
+          </div>
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">{summary.summary}</p>
+        {summary.primary_driver ? (
+          <p className="mt-2 truncate text-xs text-muted-foreground">
+            Driver: {humanize(summary.primary_driver)}
+          </p>
+        ) : null}
+      </article>
       <MetricCard
         icon={Siren}
         label="Open alerts"
-        value={formatNumber(summary.open_alerts)}
-        tone={summary.open_alerts > 0 ? "warning" : "good"}
+        value={formatNumber(kpis.open_alerts)}
+        subvalue={`${formatPercent(kpis.alert_closure_ratio)} closed`}
+        tone={kpis.open_alerts > 0 ? "warning" : "good"}
+      />
+      <MetricCard
+        icon={Crosshair}
+        label="Detection coverage"
+        value={formatPercent(kpis.detection_coverage_ratio)}
+        subvalue={`${formatNumber(kpis.silent_active_rules ?? 0)} silent active`}
+        tone={
+          kpis.detection_coverage_ratio !== null && kpis.detection_coverage_ratio < 0.5
+            ? "warning"
+            : "neutral"
+        }
       />
       <MetricCard
         icon={AlertTriangle}
-        label="Threat insights"
-        value={formatNumber(summary.threat_insights)}
-        tone={summary.high_or_critical_threat_insights > 0 ? "danger" : "neutral"}
-      />
-      <MetricCard
-        icon={Brain}
-        label="AI anomalies"
-        value={formatNumber(summary.ai_anomalies)}
-        tone={summary.high_confidence_ai_anomalies > 0 ? "warning" : "neutral"}
+        label="High-risk signals"
+        value={formatNumber(
+          kpis.high_or_critical_threat_insights + kpis.high_confidence_ai_anomalies,
+        )}
+        subvalue={`${formatNumber(kpis.high_or_critical_threat_insights)} threat / ${formatNumber(
+          kpis.high_confidence_ai_anomalies,
+        )} AI`}
+        tone={
+          kpis.high_or_critical_threat_insights > 0 ||
+          kpis.high_confidence_ai_anomalies > 0
+            ? "danger"
+            : "neutral"
+        }
       />
     </section>
   );
 }
 
 function KpiGrid({ report }: { report: SocReport }) {
+  const kpis = report.executive_kpis;
   return (
     <section className="grid gap-3 md:grid-cols-3">
       <KpiBlock
         label="High severity ratio"
-        value={formatPercent(report.operational_kpis.high_severity_ratio)}
+        value={formatPercent(kpis.high_severity_ratio)}
       />
       <KpiBlock
         label="Auth failure ratio"
-        value={formatPercent(report.operational_kpis.authentication_failure_ratio)}
+        value={formatPercent(kpis.authentication_failure_ratio)}
       />
       <KpiBlock
-        label="Events per source"
-        value={formatNumber(report.operational_kpis.events_per_source)}
+        label="Alert closure"
+        value={formatPercent(kpis.alert_closure_ratio)}
       />
       <KpiBlock
         label="MTTA"
-        value={formatMinutes(report.alert_workflow.mtta_minutes)}
+        value={formatMinutes(kpis.mtta_minutes)}
       />
       <KpiBlock
         label="MTTR"
-        value={formatMinutes(report.alert_workflow.mttr_minutes)}
+        value={formatMinutes(kpis.mttr_minutes)}
       />
       <KpiBlock
         label="Unassigned open"
-        value={formatNumber(report.alert_workflow.unassigned_open_alerts)}
+        value={formatNumber(kpis.unassigned_open_alerts)}
       />
     </section>
   );
@@ -287,6 +321,161 @@ function DetectionCoveragePanel({
           ) : (
             data.noisy_rules.slice(0, 3).map((rule) => (
               <RuleEfficacyRow key={rule.rule_id} rule={rule} />
+            ))
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function SecurityActivityPanel({
+  activity,
+}: {
+  activity: ApiResult<SecurityActivitySummary>;
+}) {
+  if (!activity.data) {
+    return (
+      <Panel title="Security Activity">
+        <EmptyLine text={activity.error ?? "Security activity data was not returned."} />
+      </Panel>
+    );
+  }
+
+  const data = activity.data;
+  return (
+    <Panel title="Security Activity">
+      <div className="grid gap-3 md:grid-cols-4">
+        <KpiBlock label="Audit events" value={formatNumber(data.total_audit_events)} />
+        <KpiBlock
+          label="Auth failure ratio"
+          value={formatPercent(data.authentication.failure_ratio)}
+        />
+        <KpiBlock
+          label="Tenant denials"
+          value={formatNumber(data.authorization.tenant_scope_denials)}
+        />
+        <KpiBlock
+          label="Active actors"
+          value={formatNumber(data.active_actor_count)}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <LockKeyhole className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <p className="text-sm font-medium">Activity mix</p>
+          </div>
+          {data.actions.length === 0 ? (
+            <EmptyLine text="No audit actions returned for this window." />
+          ) : (
+            data.actions.slice(0, 5).map((item) => (
+              <div
+                key={`${item.action}-${item.outcome}`}
+                className="rounded-md border border-border p-3"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="truncate text-sm font-medium">{humanize(item.action)}</span>
+                  <span className="text-sm text-muted-foreground">
+                    {formatNumber(item.count)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground capitalize">
+                  {item.outcome}
+                  {item.last_seen ? ` · ${formatDateTime(item.last_seen)}` : ""}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <p className="text-sm font-medium">Actor concentration</p>
+          </div>
+          {data.top_actors.length === 0 ? (
+            <EmptyLine text="No attributed actor activity returned." />
+          ) : (
+            data.top_actors.slice(0, 5).map((item, index) => (
+              <div
+                key={`${item.actor_id ?? item.actor_email_hash ?? index}`}
+                className="rounded-md border border-border p-3"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="truncate text-sm font-medium">{actorLabel(item)}</span>
+                  <span className="text-sm text-muted-foreground">
+                    {formatNumber(item.count)}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {formatNumber(item.failure_count)} failures
+                  {item.last_seen ? ` · ${formatDateTime(item.last_seen)}` : ""}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Recent audit trail</p>
+          {data.recent_activity.length === 0 ? (
+            <EmptyLine text="No recent audit activity returned." />
+          ) : (
+            data.recent_activity.slice(0, 5).map((item, index) => (
+              <div
+                key={`${item.action}-${item.correlation_id ?? index}`}
+                className="rounded-md border border-border p-3"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="truncate text-sm font-medium">{humanize(item.action)}</span>
+                  <span className="text-xs text-muted-foreground capitalize">
+                    {item.outcome}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {item.resource ?? "No resource"}
+                  {item.created_at ? ` · ${formatDateTime(item.created_at)}` : ""}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Security oversight</p>
+          <div className="rounded-md border border-border p-3">
+            <KeyValue
+              label="Auth outcomes"
+              value={`${formatNumber(data.authentication.successes)} success / ${formatNumber(
+                data.authentication.failures,
+              )} fail`}
+            />
+            <KeyValue
+              label="Investigation flow"
+              value={`${formatNumber(data.investigations.acknowledgements)} ack / ${formatNumber(
+                data.investigations.closures,
+              )} closed`}
+            />
+            <KeyValue
+              label="Ingestion rejects"
+              value={formatNumber(data.event_ingestion_rejections)}
+            />
+          </div>
+          {data.findings.length === 0 ? (
+            <EmptyLine text="No audit findings in this window." />
+          ) : (
+            data.findings.slice(0, 3).map((finding) => (
+              <div key={finding.name} className="rounded-md border border-border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium">{humanize(finding.name)}</span>
+                  <SeverityBadge severity={finding.severity} />
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">{finding.reason}</p>
+              </div>
             ))
           )}
         </div>
@@ -668,11 +857,13 @@ function MetricCard({
   icon: Icon,
   label,
   value,
+  subvalue,
   tone,
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
+  subvalue?: string;
   tone: "neutral" | "good" | "warning" | "danger";
 }) {
   return (
@@ -690,6 +881,7 @@ function MetricCard({
         <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
       </div>
       <p className="mt-3 text-2xl font-semibold">{value}</p>
+      {subvalue ? <p className="mt-1 text-xs text-muted-foreground">{subvalue}</p> : null}
     </article>
   );
 }
@@ -858,6 +1050,16 @@ function entityLabel(event: NormalizedEvent): string | null {
     event.asset.ip_address ??
     null
   );
+}
+
+function actorLabel(actor: { actor_id: string | null; actor_email_hash: string | null }): string {
+  if (actor.actor_id) {
+    return `Actor ${shortId(actor.actor_id)}`;
+  }
+  if (actor.actor_email_hash) {
+    return `Email hash ${shortId(actor.actor_email_hash)}`;
+  }
+  return "Unknown actor";
 }
 
 function shortId(value: string): string {

@@ -28,13 +28,20 @@ from app.analytics.schemas import (
     TrendPoint,
 )
 from app.analytics.service import SocAnalyticsService
+from app.audit.repositories import AuditActivityRepository
+from app.audit.schemas import AuditActivityFilter, SecurityActivitySummary
 from app.auth.rbac import Permission
 from app.core.dependencies.security import (
     ensure_permissions_for_request,
     resolve_current_user_from_request,
     resolve_tenant_scope_for_request,
 )
-from app.detections.repositories import AlertReportingSnapshot, DetectionAlertRepository
+from app.detections.repositories import (
+    AlertReportingSnapshot,
+    DetectionAlertRepository,
+    DetectionRuleRepository,
+)
+from app.detections.schemas import DetectionCoverageFilters, DetectionCoverageSummary
 from app.events.repositories import (
     EventRepository,
     InMemoryEventRepository,
@@ -78,13 +85,36 @@ async def soc_report(request: Request) -> SocReport | JSONResponse:
     alert_snapshot = await _alert_snapshot(request, filters)
     threat_summary = await _threat_summary(request, filters)
     ai_summary = await _ai_summary(request, filters)
+    detection_coverage = await _detection_coverage(request, filters)
     return await service.report(
         filters,
         alert_snapshot=alert_snapshot,
         threat_summary=threat_summary,
         ai_summary=ai_summary,
         correlation_id=correlation_id,
+        detection_coverage=detection_coverage,
     )
+
+
+@router.get("/security-activity", response_model=SecurityActivitySummary)
+async def security_activity(request: Request) -> SecurityActivitySummary | JSONResponse:
+    """Return tenant-scoped operational audit activity aggregates."""
+    principal = await resolve_current_user_from_request(request)
+    await ensure_permissions_for_request(
+        request,
+        principal,
+        {Permission.ANALYTICS_READ.value, Permission.AUDIT_READ.value},
+    )
+    analytics_requests_total.labels(endpoint="security_activity").inc()
+    try:
+        filters = AuditActivityFilter.model_validate(_query_params(request))
+    except (ValidationError, ValueError) as exc:
+        detail = exc.errors() if isinstance(exc, ValidationError) else str(exc)
+        return JSONResponse(status_code=422, content={"detail": jsonable_encoder(detail)})
+    tenant_id = await resolve_tenant_scope_for_request(request, principal, filters.tenant_id)
+    filters = filters.model_copy(update={"tenant_id": tenant_id})
+    repository = cast(AuditActivityRepository, request.app.state.audit_repository)
+    return await repository.security_activity_summary(filters)
 
 
 @router.get("/severity", response_model=list[CountSummary])
@@ -205,6 +235,25 @@ async def _alert_snapshot(
         start_time=filters.start_time,
         end_time=filters.end_time,
         now=datetime.now(UTC),
+    )
+
+
+async def _detection_coverage(
+    request: Request,
+    filters: AnalyticsFilter,
+) -> DetectionCoverageSummary | None:
+    rule_repository = getattr(request.app.state, "detection_rule_repository", None)
+    alert_repository = getattr(request.app.state, "detection_alert_repository", None)
+    if rule_repository is None or alert_repository is None:
+        return None
+    return await cast(DetectionRuleRepository, rule_repository).coverage(
+        DetectionCoverageFilters(
+            start_time=filters.start_time,
+            end_time=filters.end_time,
+            tenant_id=filters.tenant_id,
+            limit=10,
+        ),
+        cast(DetectionAlertRepository, alert_repository),
     )
 
 

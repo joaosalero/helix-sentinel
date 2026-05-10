@@ -1,4 +1,4 @@
-.PHONY: install test lint format format-check typecheck security frontend-lint frontend-typecheck check up down migrate
+.PHONY: install test lint format format-check typecheck security frontend-lint frontend-typecheck check release-check up down migrate
 
 install:
 	python -m pip install --upgrade "pip>=26.1"
@@ -30,6 +30,8 @@ frontend-typecheck:
 	npm --prefix frontend run typecheck
 
 check: lint format-check typecheck test security frontend-lint frontend-typecheck
+
+release-check: check
 
 up:
 	docker compose up -d postgres redis prometheus otel-collector grafana

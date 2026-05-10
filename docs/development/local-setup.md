@@ -43,7 +43,7 @@ Run repository checks with:
 scripts/check.sh
 ```
 
-For focused work, use `make test`, `make lint`, `make typecheck`, `make security`, `make frontend-lint`, and `make frontend-typecheck`.
+For focused work, use `make test`, `make lint`, `make typecheck`, `make security`, `make frontend-lint`, and `make frontend-typecheck`. Before publication or sharing a demo branch, use `make release-check`.
 
 ## Git Workflow
 

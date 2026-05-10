@@ -1,6 +1,14 @@
 # Helix Sentinel
 
-Helix Sentinel is a production-oriented Security Analytics and Detection Engineering platform scaffold. It is designed as a modular monolith for SOC analytics, detection lifecycle management, threat enrichment, validation workflows, and deterministic AI-assisted analysis without introducing premature distributed-system complexity.
+Helix Sentinel is a production-oriented Security Analytics and Detection Engineering platform. It is designed as a modular monolith for SOC analytics, persisted alert workflow, investigation support, threat enrichment, validation workflows, and deterministic AI-assisted analysis without introducing premature distributed-system complexity.
+
+## At a Glance
+
+- **What it is:** a realistic SOC operations and security analytics application with persisted investigation workflows.
+- **What to review first:** the Next.js SOC dashboard, the alert lifecycle APIs, analytics/reporting services, and the architecture docs.
+- **What it avoids:** SIEM query languages, realtime streams, microservices, graph engines, and governance/compliance scope.
+- **Best demo path:** posture overview -> open alert queue -> selected alert investigation -> acknowledgement or closure -> audit/security activity.
+- **Release gate:** `make release-check` runs the full local validation suite used for publication readiness.
 
 ## Engineering Goals
 
@@ -25,11 +33,15 @@ scripts/        Local bootstrap and validation helpers
 
 The current public-facing experience centers on an operational SOC dashboard, not a marketing page. It demonstrates:
 
-- Executive security posture, risk drivers, and consolidated SOC KPIs.
-- Open alert queues, investigation detail, and contextual event timelines.
-- Detection coverage, ATT&CK activity, and rule efficacy summaries.
-- Audit-backed security activity, actor concentration, and recent audit trail visibility.
+- Executive security posture, risk drivers, queue pressure, and consolidated SOC KPIs.
+- Open alert queues with assignment, age, severity, and selected-alert investigation context.
+- Analyst workflow actions for acknowledgement and closure with persisted investigation notes and dispositions.
+- Contextual event timelines using bounded source/category pivots around the selected alert.
+- Detection coverage, ATT&CK activity, silent active rules, and rule efficacy summaries.
+- Audit-backed security activity, tenant-scope denial visibility, actor concentration, and recent audit trail visibility.
 - Prometheus/Grafana-ready operational observability.
+
+For a quick evaluator pass, start the API and frontend, open the dashboard, select an alert from the queue, review the context timeline and triage readiness block, then acknowledge or close the alert. That path exercises the persisted alert lifecycle, deterministic reporting layer, bounded investigation event retrieval, server-side API token handling, and audit-backed operational visibility without requiring a SIEM query language or realtime infrastructure. A concise reviewer path is available in [docs/showcase.md](docs/showcase.md).
 
 ## Local Setup
 
@@ -99,6 +111,7 @@ make typecheck
 make security
 make frontend-lint
 make frontend-typecheck
+make release-check
 ```
 
 Frontend-only checks:
@@ -126,6 +139,8 @@ make down
 
 ## Documentation Map
 
+- [Public showcase guide](docs/showcase.md)
+- [Public release readiness](docs/release-readiness.md)
 - [Architecture overview](docs/architecture/overview.md)
 - [Contribution guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)

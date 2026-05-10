@@ -29,6 +29,19 @@ Analytics endpoints live under `/api/v1/analytics` and require `analytics:read`.
 - `/report`: executive and analyst SOC reporting summary.
 - `/security-activity`: bounded operational audit activity summary requiring `analytics:read` and `audit:read`.
 
+## Dashboard Workflow
+
+The Next.js SOC dashboard is intentionally an operational work surface. It combines the report, open alert queue, detection coverage, security activity, selected alert detail, and bounded investigation event search into one server-rendered view.
+
+The analyst path is deliberately small:
+
+- Review executive posture, queue pressure, oldest open alert age, coverage posture, and access guardrail signals.
+- Select an open alert and inspect severity, source, category, assignment, matched selections, disposition, and existing analyst notes.
+- Use the selected alert's source/category and event time to fetch nearby normalized events in a bounded context window.
+- Review triage readiness, evidence pivots, and the context timeline before acknowledging or closing the alert with an investigation note.
+
+This keeps the showcase realistic without turning the project into a SIEM. There is no custom query language, graph engine, websocket channel, or realtime stream in the dashboard path.
+
 ## Filtering
 
 Filters are validated through dedicated schemas. Aggregation filters support time range, tenant, source, category, severity, trend bucket, limit, and offset. Normalized event retrieval adds source product/vendor, title contains, actor username/email/IP, asset hostname/IP, and IOC value filters. Aggregation time ranges are capped at 366 days; event search and SOC reports are capped at 90 days.

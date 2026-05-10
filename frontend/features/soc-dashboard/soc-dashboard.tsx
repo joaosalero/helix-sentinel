@@ -1,15 +1,18 @@
 import {
   AlertTriangle,
   ArrowRight,
+  CheckCircle2,
   Clock3,
   Crosshair,
   FileText,
   GitBranch,
   KeyRound,
   LockKeyhole,
+  RadioTower,
   type LucideIcon,
   ShieldAlert,
   Siren,
+  UserRound,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -66,9 +69,15 @@ export function SocDashboard({
         periodEnd={data.period_end}
         periodStart={data.period_start}
         posture={data.executive_summary.posture}
+        tenantId={tenantId}
       />
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-5">
         <ExecutiveStrip report={data} />
+        <OperationsBrief
+          coverage={coverage}
+          report={data}
+          securityActivity={securityActivity}
+        />
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
           <section className="flex min-w-0 flex-col gap-5">
             <KpiGrid report={data} />
@@ -81,6 +90,7 @@ export function SocDashboard({
             <AlertQueuePanel
               alerts={openAlerts}
               error={alerts.error}
+              total={alerts.data?.total}
               selectedAlertId={selectedAlert?.data?.id}
               tenantId={tenantId}
             />
@@ -96,18 +106,104 @@ export function SocDashboard({
   );
 }
 
+function OperationsBrief({
+  report,
+  coverage,
+  securityActivity,
+}: {
+  report: SocReport;
+  coverage: ApiResult<DetectionCoverageSummary>;
+  securityActivity: ApiResult<SecurityActivitySummary>;
+}) {
+  const kpis = report.executive_kpis;
+  const oldestOpen = report.alert_workflow.oldest_open_alert_minutes;
+  const staleQueue = oldestOpen !== null && oldestOpen >= 60 * 24;
+  const tenantDenials = securityActivity.data?.authorization.tenant_scope_denials ?? 0;
+  const coverageRatio = coverage.data?.coverage_ratio ?? kpis.detection_coverage_ratio;
+
+  return (
+    <section className="grid gap-3 lg:grid-cols-4">
+      <OperationalBriefItem
+        icon={Siren}
+        label="Triage pressure"
+        tone={kpis.open_alerts > 0 ? "warning" : "good"}
+        value={`${formatNumber(kpis.open_alerts)} open`}
+        detail={`${formatNumber(kpis.unassigned_open_alerts)} unassigned`}
+      />
+      <OperationalBriefItem
+        icon={Clock3}
+        label="Oldest open alert"
+        tone={staleQueue ? "danger" : oldestOpen !== null ? "warning" : "neutral"}
+        value={formatDuration(oldestOpen)}
+        detail={staleQueue ? "stale queue item" : "workflow age"}
+      />
+      <OperationalBriefItem
+        icon={Crosshair}
+        label="Coverage posture"
+        tone={coverageRatio !== null && coverageRatio < 0.5 ? "warning" : "neutral"}
+        value={formatPercent(coverageRatio)}
+        detail={`${formatNumber(kpis.silent_active_rules ?? 0)} silent active rules`}
+      />
+      <OperationalBriefItem
+        icon={LockKeyhole}
+        label="Access guardrails"
+        tone={tenantDenials > 0 ? "warning" : "good"}
+        value={`${formatNumber(tenantDenials)} tenant denials`}
+        detail="audit-backed oversight"
+      />
+    </section>
+  );
+}
+
+function OperationalBriefItem({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  detail: string;
+  tone: "neutral" | "good" | "warning" | "danger";
+}) {
+  return (
+    <article
+      className={cn(
+        "rounded-md border bg-white p-3 shadow-sm",
+        tone === "good" && "border-emerald-200",
+        tone === "warning" && "border-amber-300",
+        tone === "danger" && "border-red-300",
+        tone === "neutral" && "border-border",
+      )}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+      </div>
+      <p className="mt-2 text-lg font-semibold">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    </article>
+  );
+}
+
 function AppShellHeader({
   posture,
   periodStart,
   periodEnd,
+  tenantId,
 }: {
   posture: string;
   periodStart: string;
   periodEnd: string;
+  tenantId?: string;
 }) {
   return (
-    <header className="border-b border-border bg-white">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
+    <header className="border-b border-border bg-white/95">
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Helix Sentinel
@@ -119,19 +215,35 @@ function AppShellHeader({
             {formatDate(periodStart)} - {formatDate(periodEnd)}
           </p>
         </div>
-        <div
-          className={cn(
-            "flex items-center gap-2 rounded-md border px-3 py-2",
-            postureTone(posture) === "danger" && "border-red-300 bg-red-50 text-red-900",
-            postureTone(posture) === "warning" && "border-amber-300 bg-amber-50 text-amber-900",
-            postureTone(posture) === "good" && "border-emerald-200 bg-emerald-50 text-emerald-900",
-          )}
-        >
-          <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-          <span className="text-sm font-medium capitalize">{posture}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <HeaderPill
+            label="Scope"
+            value={tenantId ? "Tenant filtered" : "Aggregate demo"}
+          />
+          <HeaderPill label="Window" value="7 days" />
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-md border px-3 py-2",
+              postureTone(posture) === "danger" && "border-red-300 bg-red-50 text-red-900",
+              postureTone(posture) === "warning" && "border-amber-300 bg-amber-50 text-amber-900",
+              postureTone(posture) === "good" && "border-emerald-200 bg-emerald-50 text-emerald-900",
+            )}
+          >
+            <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+            <span className="text-sm font-medium capitalize">{posture}</span>
+          </div>
         </div>
       </div>
     </header>
+  );
+}
+
+function HeaderPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="ml-2 text-sm font-medium">{value}</span>
+    </div>
   );
 }
 
@@ -140,7 +252,7 @@ function ExecutiveStrip({ report }: { report: SocReport }) {
   const kpis = report.executive_kpis;
   return (
     <section className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_repeat(3,minmax(0,1fr))]">
-      <article className="rounded-md border border-border bg-white p-4">
+      <article className="rounded-md border border-border bg-white p-4 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-sm text-muted-foreground">Executive posture</p>
@@ -574,16 +686,21 @@ function FindingsPanel({ findings }: { findings: ReportingFinding[] }) {
 function AlertQueuePanel({
   alerts,
   error,
+  total,
   selectedAlertId,
   tenantId,
 }: {
   alerts: DetectionAlertListResponse["items"];
   error: string | null;
+  total?: number;
   selectedAlertId?: string;
   tenantId?: string;
 }) {
   return (
-    <Panel title="Open Alert Queue" subtitle="Persisted alerts awaiting triage">
+    <Panel
+      title="Open Alert Queue"
+      subtitle={`${formatNumber(total ?? alerts.length)} persisted alerts awaiting triage`}
+    >
       {error ? (
         <EmptyLine text={error} />
       ) : (
@@ -606,9 +723,11 @@ function AlertQueuePanel({
                     <p className="mt-1 text-xs text-muted-foreground">
                       {alert.source_name} · {humanize(alert.category)}
                     </p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {formatDateTime(alert.event_time)}
-                    </p>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span>{formatAge(alert.event_time)} old</span>
+                      <span>{alert.assigned_to ?? "Unassigned"}</span>
+                      <span>{shortId(alert.id)}</span>
+                    </div>
                   </div>
                   <SeverityBadge severity={alert.severity} />
                 </div>
@@ -648,6 +767,7 @@ function InvestigationPanel({
   const item = alert.data;
   const canAcknowledge = item.status === "open";
   const canClose = item.status === "open" || item.status === "acknowledged";
+  const workflowLocked = !canAcknowledge && !canClose;
 
   return (
     <Panel title="Investigation Detail" subtitle="Selected alert context">
@@ -670,6 +790,11 @@ function InvestigationPanel({
           </div>
         </div>
 
+        <InvestigationReadiness
+          alert={item}
+          events={investigationEvents}
+        />
+
         <TimelinePanel
           alert={item}
           events={investigationEvents}
@@ -690,6 +815,9 @@ function InvestigationPanel({
             action={acknowledgeAlert}
             alertId={item.id}
             disabled={!canAcknowledge}
+            disabledReason={
+              canAcknowledge ? undefined : "Alert is no longer open for acknowledgement."
+            }
             noteLabel="Acknowledge note"
             submitLabel="Acknowledge"
             tenantId={tenantId}
@@ -697,11 +825,69 @@ function InvestigationPanel({
           <CloseForm
             alertId={item.id}
             disabled={!canClose}
+            disabledReason={
+              workflowLocked ? "Closed alerts keep their recorded disposition." : undefined
+            }
             tenantId={tenantId}
           />
         </div>
       </div>
     </Panel>
+  );
+}
+
+function InvestigationReadiness({
+  alert,
+  events,
+}: {
+  alert: DetectionAlert;
+  events: ApiResult<EventSearchResponse> | null;
+}) {
+  const contextEvents = events?.data?.items ?? [];
+  const relatedEvents = contextEvents.filter((event) => event.id !== alert.event_id);
+  const highContext = relatedEvents.filter((event) =>
+    ["high", "critical"].includes(event.severity),
+  ).length;
+
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <p className="text-sm font-medium">Triage readiness</p>
+      </div>
+      <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+        <ReadinessItem
+          complete={alert.assigned_to !== null}
+          label={alert.assigned_to ? `Assigned to ${alert.assigned_to}` : "Unassigned"}
+        />
+        <ReadinessItem
+          complete={alert.investigation_note !== null}
+          label={alert.investigation_note ? "Analyst note recorded" : "No analyst note"}
+        />
+        <ReadinessItem
+          complete={relatedEvents.length > 0}
+          label={`${formatNumber(relatedEvents.length)} related context events`}
+        />
+        <ReadinessItem
+          complete={highContext > 0 || !["high", "critical"].includes(alert.severity)}
+          label={`${formatNumber(highContext)} high+ context events`}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ReadinessItem({ complete, label }: { complete: boolean; label: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <span
+        className={cn(
+          "h-2 w-2 shrink-0 rounded-full",
+          complete ? "bg-emerald-500" : "bg-amber-500",
+        )}
+      />
+      <span className="truncate">{label}</span>
+    </div>
   );
 }
 
@@ -750,6 +936,7 @@ function TimelinePanel({
         <KeyValue label="Window" value="±12h" />
         <KeyValue label="Matched event" value={shortId(alert.event_id)} />
       </div>
+      <EvidencePivots alert={alert} events={timeline} />
       <div className="mt-4 space-y-0">
         {timeline.length === 0 ? (
           <EmptyLine text="No source/category context events found around this alert." />
@@ -762,6 +949,35 @@ function TimelinePanel({
             />
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+function EvidencePivots({
+  alert,
+  events,
+}: {
+  alert: DetectionAlert;
+  events: NormalizedEvent[];
+}) {
+  const entities = Array.from(new Set(events.map(entityLabel).filter(Boolean))).slice(0, 4);
+  const sources = Array.from(new Set(events.map((event) => event.source_name))).slice(0, 3);
+  return (
+    <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+      <div className="rounded-md border border-border px-3 py-2">
+        <div className="flex items-center gap-2">
+          <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="font-medium text-foreground">Entities</span>
+        </div>
+        <p className="mt-1 truncate">{entities.join(", ") || "No actor or asset pivot"}</p>
+      </div>
+      <div className="rounded-md border border-border px-3 py-2">
+        <div className="flex items-center gap-2">
+          <RadioTower className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="font-medium text-foreground">Sources</span>
+        </div>
+        <p className="mt-1 truncate">{sources.join(", ") || alert.source_name}</p>
       </div>
     </div>
   );
@@ -806,6 +1022,7 @@ function WorkflowForm({
   action,
   alertId,
   disabled,
+  disabledReason,
   noteLabel,
   submitLabel,
   tenantId,
@@ -813,6 +1030,7 @@ function WorkflowForm({
   action: (formData: FormData) => Promise<void>;
   alertId: string;
   disabled: boolean;
+  disabledReason?: string;
   noteLabel: string;
   submitLabel: string;
   tenantId?: string;
@@ -839,6 +1057,9 @@ function WorkflowForm({
         {submitLabel}
         <ArrowRight className="h-4 w-4" aria-hidden="true" />
       </button>
+      {disabled && disabledReason ? (
+        <p className="mt-2 text-xs text-muted-foreground">{disabledReason}</p>
+      ) : null}
     </form>
   );
 }
@@ -846,10 +1067,12 @@ function WorkflowForm({
 function CloseForm({
   alertId,
   disabled,
+  disabledReason,
   tenantId,
 }: {
   alertId: string;
   disabled: boolean;
+  disabledReason?: string;
   tenantId?: string;
 }) {
   return (
@@ -884,6 +1107,9 @@ function CloseForm({
         Close alert
         <ArrowRight className="h-4 w-4" aria-hidden="true" />
       </button>
+      {disabled && disabledReason ? (
+        <p className="mt-2 text-xs text-muted-foreground">{disabledReason}</p>
+      ) : null}
     </form>
   );
 }
@@ -913,7 +1139,7 @@ function MetricCard({
   return (
     <article
       className={cn(
-        "rounded-md border bg-white p-4",
+        "rounded-md border bg-white p-4 shadow-sm",
         tone === "good" && "border-emerald-200",
         tone === "warning" && "border-amber-300",
         tone === "danger" && "border-red-300",
@@ -932,7 +1158,7 @@ function MetricCard({
 
 function KpiBlock({ label, value }: { label: string; value: string }) {
   return (
-    <article className="rounded-md border border-border bg-white p-4">
+    <article className="rounded-md border border-border bg-white p-4 shadow-sm">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="mt-2 text-xl font-semibold">{value}</p>
     </article>
@@ -949,7 +1175,7 @@ function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-md border border-border bg-white p-4">
+    <section className="rounded-md border border-border bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-sm font-semibold">{title}</h2>
         {subtitle ? (
@@ -1044,6 +1270,24 @@ function formatMinutes(value: number | null): string {
     return "n/a";
   }
   return `${formatNumber(value)}m`;
+}
+
+function formatDuration(minutes: number | null): string {
+  if (minutes === null) {
+    return "n/a";
+  }
+  if (minutes >= 60 * 24) {
+    return `${formatNumber(Math.round(minutes / (60 * 24)))}d`;
+  }
+  if (minutes >= 60) {
+    return `${formatNumber(Math.round(minutes / 60))}h`;
+  }
+  return `${formatNumber(Math.round(minutes))}m`;
+}
+
+function formatAge(value: string): string {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
+  return formatDuration(minutes);
 }
 
 function formatDateTime(value: string): string {

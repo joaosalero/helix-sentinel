@@ -10,7 +10,6 @@ from collections.abc import Sequence
 from sqlalchemy import Table
 
 from alembic import op
-
 from helix_sentinel.db.models import Base
 
 revision: str = "20260508_006"
@@ -33,8 +32,4 @@ def downgrade() -> None:
 
 
 def _baseline_tables() -> list[Table]:
-    return [
-        table
-        for table in Base.metadata.sorted_tables
-        if table.name not in _EXCLUDED_TABLES
-    ]
+    return [table for table in Base.metadata.sorted_tables if table.name not in _EXCLUDED_TABLES]

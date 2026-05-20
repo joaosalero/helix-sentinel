@@ -9,7 +9,7 @@ import sys
 import urllib.error
 import urllib.request
 from typing import Any
-
+from urllib.parse import urlparse
 
 API_BASE_URL = os.environ.get(
     "HELIX_API_BASE_URL",
@@ -64,7 +64,7 @@ EVENTS: list[dict[str, Any]] = [
 
 
 def main() -> int:
-    endpoint = f"{API_BASE_URL}/events/ingest"
+    endpoint = _validated_endpoint(f"{API_BASE_URL}/events/ingest")
     print(f"Seeding {len(EVENTS)} synthetic demo events into {endpoint}")
 
     for event in EVENTS:
@@ -78,7 +78,7 @@ def main() -> int:
 
 def _post_event(endpoint: str, event: dict[str, Any]) -> dict[str, Any]:
     body = json.dumps(event).encode("utf-8")
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 - endpoint is validated above.
         endpoint,
         data=body,
         headers={"Accept": "application/json", "Content-Type": "application/json"},
@@ -86,7 +86,10 @@ def _post_event(endpoint: str, event: dict[str, Any]) -> dict[str, Any]:
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(  # noqa: S310 - endpoint is validated above.  # nosec B310
+            request,
+            timeout=10,
+        ) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
@@ -98,6 +101,17 @@ def _post_event(endpoint: str, event: dict[str, Any]) -> dict[str, Any]:
             file=sys.stderr,
         )
         raise SystemExit(1) from exc
+
+
+def _validated_endpoint(endpoint: str) -> str:
+    parsed = urlparse(endpoint)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        print(
+            "HELIX_API_BASE_URL must resolve to an http(s) URL for demo seeding.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    return endpoint
 
 
 if __name__ == "__main__":

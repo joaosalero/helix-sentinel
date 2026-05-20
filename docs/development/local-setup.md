@@ -19,7 +19,7 @@ The SOC dashboard is a separate Next.js app:
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -34,6 +34,10 @@ make up
 ```
 
 This starts PostgreSQL, Redis, Prometheus, the OpenTelemetry collector, and Grafana. The API still runs from the host shell with Uvicorn. Grafana is available at `http://localhost:3001`; Prometheus is available at `http://localhost:9090`.
+
+## Operational Smoke Check
+
+After migrations and startup, verify `/api/v1/ready`, `/metrics`, and the SOC dashboard. Prometheus will show the API target as down until the host-run Uvicorn process is listening on `localhost:8000`.
 
 ## Validation
 

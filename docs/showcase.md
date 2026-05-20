@@ -9,7 +9,8 @@ Use this path when reviewing Helix Sentinel as a public portfolio project or eng
 3. Run the API and frontend locally, then open the SOC dashboard.
 4. Review the dashboard from top to bottom: executive posture, triage pressure, detection coverage, audit-backed security activity, priority findings, open alert queue, and selected-alert investigation detail.
 5. Select an alert and follow the investigation panel through triage readiness, evidence pivots, context timeline, acknowledgement, and closure.
-6. Run the publication validation gate in [release-readiness.md](release-readiness.md) before sharing the repository.
+6. Use [demo-data.md](demo-data.md) or `python3 scripts/seed-demo-events.py` when synthetic payload examples are needed for screenshots or walkthroughs.
+7. Run the publication validation gate in [release-readiness.md](release-readiness.md) before sharing the repository.
 
 ## What The Demo Should Show
 
@@ -31,6 +32,7 @@ For public repository images or a portfolio walkthrough, capture:
 ## Demo Capture Checklist
 
 - Use synthetic or sanitized seed data only.
+- Keep demo data bounded to the `default` tenant and synthetic identifiers.
 - Capture the dashboard after selecting an alert so the investigation panel is populated.
 - Prefer a desktop-width viewport so executive posture, operational brief, alert queue, and investigation detail are visible together.
 - Verify the header shows a safe scope label such as `Aggregate demo` or `Tenant filtered`.

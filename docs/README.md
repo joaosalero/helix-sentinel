@@ -4,6 +4,7 @@ Start here when navigating the repository:
 
 - [Architecture overview](architecture/overview.md)
 - [Public showcase guide](showcase.md)
+- [Demo data guidance](demo-data.md)
 - [Public release readiness](release-readiness.md)
 - [Local development setup](development/local-setup.md)
 - [Repository standards](development/repository-standards.md)
@@ -32,3 +33,4 @@ The fastest way to understand the project is to review the operational SOC dashb
 - The architecture docs explain why these surfaces stay inside a modular monolith with PostgreSQL-backed persistence and server-side API access instead of adding streaming, websocket, graph, or SIEM-query infrastructure.
 
 For screenshot and walkthrough guidance, see the [public showcase guide](showcase.md).
+For deterministic synthetic payloads, see [demo data guidance](demo-data.md).

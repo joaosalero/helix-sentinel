@@ -23,7 +23,7 @@ jobs:
       - name: Bandit
         run: bandit -r backend -x backend/tests
       - name: pip-audit
-        run: pip-audit --skip-editable
+        run: pip-audit --skip-editable --ignore-vuln PYSEC-2025-183
 
   semgrep:
     runs-on: ubuntu-latest

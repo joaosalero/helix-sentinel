@@ -21,6 +21,8 @@ Categories are intentionally small: `authentication`, `authorization`, `network`
 
 Payloads must be JSON objects. Empty payloads, unknown top-level request fields, excessive nesting, excessive arrays, excessive top-level keys, and oversized strings are rejected. The endpoint does not perform unsafe deserialization or dynamic parsing.
 
+The ingestion endpoint is intended for local development and trusted ingestion paths. It is not a public internet collection endpoint. Deployments that expose ingestion outside a trusted network must add an authentication boundary before the route, such as route-level API authentication or a controlled gateway, while preserving the same validation, audit, and metric behavior.
+
 ## Database Strategy
 
 PostgreSQL stores raw and normalized events in separate tables. Raw events use JSONB for source payload retention. Normalized events use indexed scalar columns for common filters and JSONB fields for actor, asset, enrichment, network, and IOC metadata. Indexes prioritize tenant/time, category/time, severity/time, source/time, and targeted JSONB lookups.

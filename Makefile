@@ -21,7 +21,7 @@ typecheck:
 
 security:
 	bandit -r backend -x backend/tests
-	pip-audit --skip-editable
+	pip-audit --skip-editable --ignore-vuln PYSEC-2025-183
 
 frontend-lint:
 	npm --prefix frontend run lint

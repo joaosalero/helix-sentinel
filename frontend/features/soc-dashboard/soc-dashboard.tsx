@@ -706,15 +706,16 @@ function AlertQueuePanel({
       ) : (
         <div className="space-y-3">
           {alerts.length === 0 ? (
-            <EmptyLine text="No open alerts returned." />
+            <EmptyLine text="No open alerts awaiting triage." />
           ) : (
             alerts.map((alert) => (
               <Link
                 key={alert.id}
                 href={alertHref(alert.id, tenantId)}
+                aria-current={selectedAlertId === alert.id ? "true" : undefined}
                 className={cn(
                   "block rounded-md border border-border p-3 transition-colors hover:border-primary",
-                  selectedAlertId === alert.id && "border-primary bg-muted",
+                  selectedAlertId === alert.id && "border-primary bg-muted/70",
                 )}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -1116,9 +1117,9 @@ function CloseForm({
 
 function KeyValue({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <span className="font-medium text-foreground">{label}: </span>
-      <span>{value}</span>
+      <span className="break-words">{value}</span>
     </div>
   );
 }
@@ -1176,10 +1177,10 @@ function Panel({
 }) {
   return (
     <section className="rounded-md border border-border bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <h2 className="text-sm font-semibold">{title}</h2>
         {subtitle ? (
-          <span className="max-w-[55%] truncate text-right text-xs text-muted-foreground">
+          <span className="text-xs text-muted-foreground sm:max-w-[55%] sm:text-right">
             {subtitle}
           </span>
         ) : null}

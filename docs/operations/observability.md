@@ -15,6 +15,10 @@ Grafana is provisioned with a Prometheus datasource and a Helix Sentinel operati
 - the OpenTelemetry collector self-metrics endpoint
 - Grafana metrics
 
+## Startup Order
+
+Use `make up` to start PostgreSQL, Redis, Prometheus, the OpenTelemetry collector, and Grafana. Then run migrations and start the API from the host shell. Prometheus expects the host-run API at `host.docker.internal:8000`, so the API target will remain down until Uvicorn is running.
+
 Start the backend with Uvicorn before expecting the API target to be up:
 
 ```bash

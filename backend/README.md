@@ -24,6 +24,8 @@ Audit events are structured for future SIEM ingestion. Audit metadata is sanitiz
 
 The event ingestion foundation accepts single JSON security events at `POST /api/v1/events/ingest`. Requests are strictly validated, size-limited, stored as raw telemetry, normalized into query-friendly fields, audited, and counted through Prometheus metrics.
 
+The endpoint is intentionally suitable for local and trusted ingestion paths. Do not expose it directly to the public internet without an authentication boundary in front of the route.
+
 Example:
 
 ```json

@@ -16,6 +16,7 @@ This runs backend linting, backend format checks, MyPy, pytest, Bandit, dependen
 
 - Start PostgreSQL and Redis, apply migrations, and run the authoritative FastAPI app.
 - Start the Next.js dashboard with server-side API configuration.
+- Use synthetic demo data only; see [demo-data.md](demo-data.md) for bounded payload examples.
 - Confirm the dashboard loads executive posture, operational brief cards, detection coverage, security activity, open alert queue, and selected-alert investigation detail.
 - Select an alert and verify the persisted workflow path: acknowledgement, closure, investigation note, disposition, and refreshed dashboard state.
 - Check Prometheus metrics and Grafana availability when running the local observability stack.

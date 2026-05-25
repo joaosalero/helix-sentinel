@@ -22,7 +22,7 @@ def upgrade() -> None:
     """Create persisted detection alert lifecycle records."""
     op.create_table(
         "detection_alerts",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("tenant_id", sa.String(length=80), nullable=False),
         sa.Column("rule_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("event_id", postgresql.UUID(as_uuid=True), nullable=False),

@@ -46,27 +46,17 @@ The repository is designed as a realistic engineering portfolio project for:
 
 ---
 
-# Dashboard Preview
+# Dashboard Review Path
 
-> Replace the placeholder images below with real screenshots before public promotion.
+The primary evaluator surface is the SOC operations dashboard. Start the backend
+and frontend locally, then review the executive posture strip, operational brief,
+detection coverage, security activity, open alert queue, and selected-alert
+investigation detail.
 
-## Executive Security Posture
+Use `python3 scripts/seed-demo-events.py` when bounded synthetic ingestion context
+is useful for screenshots or walkthroughs.
 
-```text
-/docs/assets/dashboard-posture-overview.png
-```
-
-## Alert Investigation Workflow
-
-```text
-/docs/assets/dashboard-alert-investigation.png
-```
-
-## Threat Analytics and Coverage
-
-```text
-/docs/assets/dashboard-threat-analytics.png
-```
+For screenshot and walkthrough guidance, see [docs/showcase.md](docs/showcase.md).
 
 ---
 
@@ -251,7 +241,7 @@ uvicorn helix_sentinel.main:create_app --factory --app-dir backend --reload
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -399,6 +389,7 @@ SECURITY.md
 ## Public Documentation
 
 * [Showcase Guide](docs/showcase.md)
+* [Demo Data Guidance](docs/demo-data.md)
 * [Release Readiness](docs/release-readiness.md)
 * [Contribution Guide](CONTRIBUTING.md)
 * [Security Policy](SECURITY.md)
@@ -497,13 +488,7 @@ Before contributing, review:
 
 # License
 
-Add a public license before broad public distribution.
-
-Recommended:
-
-* MIT
-* Apache-2.0
-* BSD-3-Clause
+This project is released under the [MIT License](LICENSE).
 
 ---
 

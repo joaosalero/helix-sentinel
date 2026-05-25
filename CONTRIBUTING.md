@@ -14,7 +14,7 @@ Helix Sentinel is a security-focused modular monolith. Keep changes small, expli
 ```bash
 python -m pip install --upgrade "pip>=26.1"
 python -m pip install -e ".[dev,security]"
-npm --prefix frontend install
+npm --prefix frontend ci
 scripts/check.sh
 ```
 

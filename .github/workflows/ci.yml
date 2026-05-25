@@ -11,6 +11,20 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: helix_sentinel_test
+          POSTGRES_USER: helix
+          POSTGRES_PASSWORD: helix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U helix -d helix_sentinel_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,6 +38,10 @@ jobs:
         run: ruff check .
       - name: Typecheck
         run: mypy backend
+      - name: Migration smoke
+        run: alembic -c backend/alembic.ini upgrade head
+        env:
+          HELIX_DATABASE_URL: postgresql+asyncpg://helix:helix@localhost:5432/helix_sentinel_test
       - name: Test
         run: pytest
       - name: Bandit

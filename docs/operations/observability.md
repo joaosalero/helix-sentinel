@@ -8,6 +8,11 @@ Local observability runs through Docker Compose:
 - Grafana: `http://localhost:3001`
 - OpenTelemetry collector: OTLP gRPC `localhost:4317`, OTLP HTTP `localhost:4318`
 
+Published Compose ports bind to `127.0.0.1` by default. Setting
+`HELIX_BIND_HOST` to a non-loopback address exposes these services beyond the
+local environment and should be an intentional choice protected by appropriate
+network controls.
+
 Grafana is provisioned with a Prometheus datasource and a Helix Sentinel operational overview dashboard. Prometheus scrapes:
 
 - the host-run API at `host.docker.internal:8000`

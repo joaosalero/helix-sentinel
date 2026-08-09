@@ -79,8 +79,8 @@ jobs:
           persist-credentials: false
       - name: Install Gitleaks
         env:
-          GITLEAKS_VERSION: "8.24.3"
-          GITLEAKS_SHA256: "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c"
+          GITLEAKS_VERSION: "8.30.1"
+          GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
         run: |
           archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           archive_path="${RUNNER_TEMP}/${archive}"
@@ -99,10 +99,8 @@ jobs:
           canary_dir="${RUNNER_TEMP}/gitleaks-canary"
           canary_report="${RUNNER_TEMP}/gitleaks-canary.json"
           install -d -m 0700 "${canary_dir}"
-          printf '%s%s%s\n' \
-            'ghp_' \
-            'aBcDeFgHiJkLmNoPqRsTuVwXyZ' \
-            '0123456789' > "${canary_dir}/canary.txt"
+          canary_value="ghp_$(printf '%s' 'helix-sentinel-gitleaks-positive-control-v2' | sha256sum | cut -c1-36)"
+          printf '%s\n' "${canary_value}" > "${canary_dir}/canary.txt"
 
           set +e
           "${RUNNER_TEMP}/gitleaks" dir "${canary_dir}" \
@@ -119,10 +117,18 @@ jobs:
           set -e
 
           if [[ "${canary_status}" -ne 2 ]] || \
-             ! jq -e 'length > 0 and all(.[]; .Secret == "REDACTED")' "${canary_report}" > /dev/null; then
+             ! jq -e 'length > 0 and all(.[]; .Secret == "REDACTED" and (.Match | contains("REDACTED")))' "${canary_report}" > /dev/null || \
+             grep -Fq -- "${canary_value}" "${canary_report}" "${RUNNER_TEMP}/gitleaks-canary.log"; then
+            unset canary_value
             echo "Gitleaks detection control failed" >&2
             exit 1
           fi
+          unset canary_value
+      - name: Test Gitleaks commit coverage
+        run: |
+          scripts/security/test-gitleaks-range.sh \
+            "${RUNNER_TEMP}/gitleaks" \
+            infra/gitleaks/gitleaks.toml
       - name: Scan committed changes for secrets
         env:
           GITLEAKS_EVENT_NAME: ${{ github.event_name }}
@@ -130,82 +136,24 @@ jobs:
           GITLEAKS_PUSH_BEFORE: ${{ github.event.before }}
           GITLEAKS_SHA: ${{ github.sha }}
         run: |
-          require_sha() {
-            if [[ ! "$1" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "Invalid commit SHA in GitHub event payload" >&2
-              exit 1
-            fi
-          }
-
-          case "${GITLEAKS_EVENT_NAME}" in
-            pull_request)
-              require_sha "${GITLEAKS_PR_BASE}"
-              require_sha "${GITLEAKS_SHA}"
-              git cat-file -e "${GITLEAKS_PR_BASE}^{commit}"
-              from_ref="${GITLEAKS_PR_BASE}"
-              to_ref="${GITLEAKS_SHA}"
-              ;;
-            push)
-              require_sha "${GITLEAKS_SHA}"
-              from_ref="${GITLEAKS_PUSH_BEFORE}"
-              to_ref="${GITLEAKS_SHA}"
-              ;;
-            *)
-              echo "Unsupported event: ${GITLEAKS_EVENT_NAME}" >&2
-              exit 1
-              ;;
-          esac
-
-          if ! git cat-file -e "${to_ref}^{commit}" 2>/dev/null; then
-            echo "Unable to resolve the scan head commit" >&2
-            exit 1
-          fi
-
-          if [[ -z "${from_ref}" || "${from_ref}" =~ ^0+$ ]] || \
-             ! git cat-file -e "${from_ref}^{commit}" 2>/dev/null || \
-             ! git merge-base --is-ancestor "${from_ref}" "${to_ref}"; then
-            log_opts="--diff-merges=first-parent ${to_ref}"
-            expected_count="$(git rev-list --count "${to_ref}")"
-          else
-            expected_count="$(git rev-list --count "${from_ref}..${to_ref}")"
-            if [[ "${expected_count}" -eq 0 ]]; then
-              echo "No commits to scan"
-              exit 0
-            fi
-            log_opts="--diff-merges=first-parent ${from_ref}..${to_ref}"
-          fi
-
-          if [[ "${expected_count}" -eq 0 ]]; then
-            echo "Resolved Gitleaks range is empty" >&2
-            exit 1
-          fi
-
           set +e
           scan_report="${RUNNER_TEMP}/gitleaks-scan.json"
-          "${RUNNER_TEMP}/gitleaks" git \
-            --config infra/gitleaks/gitleaks.toml \
-            --exit-code 2 \
-            --log-opts "${log_opts}" \
-            --max-decode-depth 0 \
-            --no-banner \
-            --no-color \
-            --redact=100 \
-            --report-format json \
-            --report-path "${scan_report}" \
-            --verbose \
-            . 2>&1 | tee "${RUNNER_TEMP}/gitleaks-scan.log"
-          scan_status="${PIPESTATUS[0]}"
+          scripts/security/run-gitleaks-range.sh \
+            "${RUNNER_TEMP}/gitleaks" \
+            infra/gitleaks/gitleaks.toml \
+            "${GITLEAKS_EVENT_NAME}" \
+            "${GITLEAKS_PR_BASE}" \
+            "${GITLEAKS_PUSH_BEFORE}" \
+            "${GITLEAKS_SHA}" \
+            "${scan_report}" \
+            .
+          scan_status="$?"
           set -e
 
           if [[ "${scan_status}" -ne 0 && "${scan_status}" -ne 2 ]]; then
             echo "Gitleaks execution failed" >&2
             exit "${scan_status}"
           fi
-          if ! grep -Eq '(^| )[0-9]+ commits scanned\.' "${RUNNER_TEMP}/gitleaks-scan.log"; then
-            echo "Gitleaks did not report a completed commit scan" >&2
-            exit 1
-          fi
-          echo "Validated Gitleaks range contains ${expected_count} commit(s)"
           finding_count="$(jq 'length' "${scan_report}")"
           if [[ "${finding_count}" -gt 0 ]]; then
             echo "Gitleaks detected ${finding_count} finding(s)" >&2

@@ -1,655 +1,216 @@
-# AGENTS.md
-
-# HELIX SENTINEL — OPERATIONAL ENGINEERING RULES
-
-You are working inside an already mature security analytics and SOC operations platform.
-
-Project name:
-
-* Helix Sentinel
-
-Architecture status:
-
-* modular monolith
-* operationally coherent
-* production-oriented
-* additive-first
-* security-focused
-* observability-first
-* deterministic
-* repository-backed
-* low-risk incremental evolution only
-
-The repository is already:
-
-* professionally presentable
-* recruiter-ready
-* close to public-release maturity
-
-The primary engineering risks are now:
-
-* architectural drift
-* unnecessary complexity
-* dependency churn
-* overengineering
-* speculative refactors
-* inconsistent operational behavior
-* frontend ecosystem instability
-* CI/security workflow regressions
-
----
-
-# PROJECT PHILOSOPHY
-
-Helix Sentinel intentionally avoids:
-
-* microservices
-* realtime streaming systems
-* websocket infrastructure
-* graph engines
-* SIEM query languages
-* speculative AI systems
-* governance/compliance platform inflation
-* fake-enterprise abstractions
-* orchestration sprawl
-* unnecessary frameworks
+# HELIX SENTINEL — ENGINEERING OPERATING RULES
 
-Helix Sentinel intentionally prioritizes:
+## Mission and priorities
 
-* operational realism
-* deterministic workflows
-* maintainability-first engineering
-* typed backend engineering
-* security-first architecture
-* auditability
-* observability
-* repository-backed persistence
-* pragmatic SOC workflows
-* low operational risk
-* predictable runtime behavior
+Helix Sentinel is a production-oriented security analytics and SOC operations platform.
+Work must preserve a secure, private, auditable, maintainable public product.
 
----
+Priority order:
 
-# GLOBAL RULES
+1. Security and privacy by design.
+2. Correctness, tenant isolation, auditability, and operational safety.
+3. Compatibility, maintainability, and clear bounded architecture.
+4. Professional, accessible, responsive SOC user experience.
+5. Efficient execution and low file/dependency churn.
 
-Always:
-- preserve modular monolith architecture
-- preserve deterministic workflows
-- preserve observability semantics
-- preserve auditability
-- preserve tenant isolation
-- preserve CI/security posture
-- minimize token usage
-- minimize file churn
-- minimize dependency churn
+Token or time efficiency must never replace required security, privacy, quality, or
+risk-appropriate validation.
 
-Do NOT:
-- redesign architecture
-- introduce new infrastructure
-- introduce realtime systems
-- introduce websocket behavior
-- introduce framework migrations
-- repeatedly refactor stable files
-- perform speculative modernization
+## Engineering judgment and requirement hierarchy
 
-Automated tests are NOT the default priority.
-Run only lightweight targeted validation if strictly necessary.
+Security, privacy, correctness, data protection, and architectural integrity take
+precedence over a user's proposed implementation method. Treat user ideas as
+objectives and preferences, not permission for an unsafe or unsuitable solution.
+Before implementing, assess conflicts with security, privacy, architecture,
+reliability, and maintainability practices.
 
----
+Implement a safer, technically superior adjustment when it preserves the user's
+objective, remains within authorized scope, is reversible, and has no significant
+architectural, behavioral, operational, or cost impact. Explain that deviation in the
+final summary. If a correction materially changes product behavior, architecture, data
+handling, trust boundaries, compatibility, external exposure, cost, or project scope,
+stop and request authorization.
 
-# ARCHITECTURE RULES
+Never weaken security or privacy to follow an implementation detail literally.
+"Modern technology" means the currently suitable, secure, and maintainable choice for
+this project, not automatically the newest version or framework.
 
-The architecture is intentionally stable.
+Resolve conflicts in this order:
 
-NEVER:
+1. Safety and applicable legal or data-protection requirements.
+2. Security and privacy.
+3. Correctness and data integrity.
+4. Explicit product objective.
+5. Architecture and maintainability.
+6. UX and performance.
+7. Implementation preference.
+8. Token and execution efficiency.
 
-* redesign architecture
-* introduce distributed systems
-* create parallel orchestration layers
-* duplicate repository systems
-* duplicate analytics pipelines
-* duplicate observability systems
-* create speculative abstractions
-* replace stable infrastructure unnecessarily
-* introduce hidden execution flows
-* create broad framework migrations
-* introduce architectural inflation
+Document relevant assumptions, rejected unsafe approaches, and residual risks
+concisely.
 
-ALWAYS:
+## Product profiles and trust boundaries
 
-* reuse existing infrastructure
-* reuse repository contracts
-* reuse observability patterns
-* reuse middleware
-* reuse validation patterns
-* reuse typed DTO/schema patterns
-* preserve deterministic behavior
-* preserve auditability
-* preserve tenant isolation semantics
-* preserve operational consistency
-* preserve existing runtime contracts
+Helix Sentinel has two strictly separated profiles.
 
----
+### Private/local profile
 
-# ACTIVE ARCHITECTURE UNDERSTANDING
+The private profile may integrate with authorized local AI pipelines, local services,
+and private data. It must preserve access control, confidentiality, traceability, and
+tenant isolation.
 
-Current authoritative backend runtime:
+Private integrations must be optional, explicitly configured, and decoupled from the
+public product core. Local configuration containing private endpoints, paths,
+credentials, data, names, or infrastructure details must remain outside version
+control.
 
-* backend/helix_sentinel/main.py
+### Public/standalone profile
 
-Current authoritative SQLAlchemy metadata owner:
+The public product must work independently of private local AI infrastructure. It
+must not contain or require private services, data, credentials, internal endpoints,
+personal names, local paths, sensitive samples, or operational metadata.
 
-* helix_sentinel.db.base.Base
+Public defaults must be secure. Before publication or sharing, inspect the intended
+scope for secrets, credentials, internal paths, private package sources, sensitive
+fixtures, generated metadata, and undocumented local dependencies.
 
-Current active feature domains mostly live under:
+Never mix private configuration or data into public code, documentation, examples,
+tests, images, logs, lockfiles, commits, releases, or external messages.
 
-* backend/app/*
+## Environment and platform security
 
-Platform/foundation modules mostly live under:
+Ubuntu under WSL2 is the primary private execution environment. Keep processing,
+dependencies, services, data, and tools there when technically appropriate.
 
-* backend/helix_sentinel/*
+Windows is the host and must remain clean, private, and secure. Perform Windows-side
+actions only when necessary for the approved task and explain their justification.
 
-The app/* versus helix_sentinel/* split is a KNOWN architectural constraint.
+Respect security boundaries between Windows, WSL2, Docker, networks, filesystems,
+and credentials. Do not expose services on public interfaces by default. Prefer
+loopback binding, least privilege, authentication, segmentation, encryption where
+applicable, and secure secret handling.
 
-DO NOT:
+Do not introduce commands, settings, or automation that weaken Windows, Ubuntu,
+WSL2, Docker, networking, authentication, or logging. Recommend security updates
+when relevant, but do not apply them without authorization.
 
-* perform large namespace consolidations
-* perform broad domain migrations
-* attempt architecture cleanup for aesthetics
+## Confirmed architecture
 
-Only touch those areas if:
+Helix Sentinel is a modular monolith. Preserve this model while it remains the best
+fit for demonstrated requirements.
 
-* operationally necessary
-* explicitly requested
-* low-risk
-* incremental
+Confirmed runtime and ownership boundaries:
 
----
+- The authoritative backend runtime is `backend/helix_sentinel/main.py`.
+- The authoritative SQLAlchemy metadata owner is `helix_sentinel.db.base.Base`.
+- Active feature domains primarily live under `backend/app/*`.
+- Platform and foundation modules primarily live under `backend/helix_sentinel/*`.
 
-# SECURITY RULES
+The `app/*` and `helix_sentinel/*` split is an existing constraint, not a cleanup
+project. Do not perform namespace consolidation or broad domain migration unless it
+is necessary, explicitly authorized, low risk, and incrementally validated.
 
-Security posture is critical.
+Reuse existing contracts, repositories, middleware, schemas, validation, and
+observability patterns when they are secure and suitable. Preserve deterministic
+behavior, typed boundaries, repository-backed persistence, SQLAlchemy expression
+queries, async PostgreSQL adapters, and the FastAPI app-factory model.
 
-Preserve:
+Do not add microservices, streaming, WebSockets, graph systems, SIEM query
+languages, opaque AI behavior, background-system sprawl, or abstraction layers
+without a proven requirement.
 
-* RBAC semantics
-* tenant scoping
-* audit logging
-* correlation IDs
-* structured logging
-* no-secret logging posture
-* Semgrep enforcement
-* Gitleaks enforcement
-* CI security workflows
-* deterministic validation behavior
+Material architectural changes require a demonstrated need, alternatives, benefit,
+risk, migration path, compatibility impact, and validation plan before implementation.
 
-DO NOT:
+## Security, privacy, and observability
 
-* weaken Semgrep rules globally
-* disable security workflows
-* bypass CI enforcement
-* log secrets/tokens/credentials
-* introduce permissive auth behavior
-* expose tenant data
-* store tokens client-side
-* remove audit events
-* introduce unsafe dynamic queries
+Always preserve:
 
-Treat these as sensitive:
+- RBAC and least-privilege semantics;
+- tenant scoping and authorization boundaries;
+- audit events and correlation IDs;
+- structured logging and no-secret logging;
+- input validation and safe query construction;
+- Prometheus, readiness, Grafana compatibility, and OpenTelemetry hooks;
+- Semgrep, Gitleaks, dependency scanning, and CI security controls.
 
-* authorization headers
-* tokens
-* credentials
-* secrets
-* tenant identifiers
-* raw customer payloads
-* telemetry that could identify customers
+Never log or persist passwords, password hashes, authorization headers, tokens,
+credentials, secrets, unnecessary personal data, raw sensitive customer payloads,
+or identifying telemetry unless explicitly required, authorized, and protected.
 
----
+Do not weaken Semgrep, Gitleaks, CI enforcement, authentication, authorization,
+tenant isolation, auditability, or dependency-chain controls to make work easier.
 
-# FRONTEND RULES
+Changes affecting trust boundaries, authentication, authorization, tenant isolation,
+secrets, network exposure, persistence, migrations, ingestion, external
+integrations, or sensitive telemetry require threat modeling proportional to the
+risk before implementation.
 
-Frontend philosophy:
+## Frontend and UX
 
-* operational dashboard
-* not a marketing site
-* not a consumer UI
-* not a realtime SIEM
+The frontend is an operational SOC workbench, not a marketing site or consumer UI.
+Preserve server-rendered Next.js behavior, the typed API client, bounded
+investigation workflows, and operational readability.
 
-Preserve:
+Prefer modern, professional, accessible, responsive layouts with clear information
+hierarchy, low cognitive load, consistent interaction patterns, and measurable
+operational value.
 
-* server-rendered Next.js flow
-* typed API client
-* operational readability
-* lightweight UX
-* bounded investigation workflows
-* maintainability-first structure
+Avoid dependencies, animation, global state, charting systems, or frontend
+abstractions without a concrete benefit. Do not block justified UX or technology
+improvements: evaluate accessibility, performance, security, maintenance, and
+compatibility first.
 
-DO NOT:
+## Dependency and change discipline
 
-* introduce Redux/global-state frameworks
-* introduce websocket/realtime systems
-* introduce charting-framework sprawl
-* introduce frontend overengineering
-* introduce excessive animation
-* redesign the frontend architecture casually
+Minimize dependency churn, file churn, and architectural movement. Do not upgrade,
+replace, or migrate frameworks speculatively.
 
-The frontend must continue feeling like:
+Before a dependency change, identify the operational need, compatibility and security
+risk, CI impact, and rollback or containment strategy.
+Treat Next.js, ESLint, Tailwind, observability, and security tooling as
+high-sensitivity ecosystems.
 
-* a pragmatic SOC workbench
-* an analyst operations surface
-* an engineering-focused dashboard
+Inspect modules, contracts, integration points, documentation, workflows, and state
+before editing. Preserve pre-existing user changes. Make small, cohesive, task-related
+changes only. Do not modify unrelated files or invent APIs, files, registries,
+integrations, results, or runtime behavior.
 
----
+## Validation
 
-# BACKEND RULES
+Use validation proportional to scope and risk. Start with focused checks and expand
+when risk justifies it. Never omit required validation to save tokens or time, and
+do not repeatedly run heavy suites without a reason.
 
-Preserve:
+Changes involving authentication, authorization, tenant isolation, persistence,
+migrations, security controls, dependencies, CI, or public/private boundaries
+require appropriate automated tests and targeted security validation.
 
-* FastAPI app factory structure
-* repository-backed persistence
-* SQLAlchemy expression-based queries
-* async Postgres adapters
-* typed service boundaries
-* bounded analytics behavior
-* deterministic AI-assisted analytics
-* operational workflow semantics
+Existing validation commands include:
 
-DO NOT:
+- `make test` or `pytest`
+- `make lint`
+- `make format-check`
+- `make typecheck`
+- `make security`
+- `make frontend-lint`
+- `make frontend-typecheck`
+- `make check` or `make release-check`
+- `scripts/check.sh`
 
-* introduce ORM anti-patterns
-* introduce raw unsafe SQL
-* introduce hidden persistence layers
-* introduce background-system sprawl
-* introduce speculative service abstractions
-* introduce microservice decomposition
+Report checks run, results, and relevant checks intentionally not run.
 
----
+## Authorization boundaries
 
-# OBSERVABILITY RULES
+Do not install, update, delete, move, revert, format, stage, commit, branch, tag,
+push, publish, release, send external data, or modify files outside the authorized
+scope without explicit user authorization.
 
-Observability is part of the platform design.
+Do not run destructive commands. Do not discard or rewrite pre-existing changes.
 
-Preserve:
+When a material ambiguity affects security, privacy, architecture, public/private
+separation, data handling, external impact, or compatibility, stop and request a
+decision rather than assuming permission.
 
-* Prometheus metrics
-* Grafana compatibility
-* OpenTelemetry hooks
-* readiness endpoints
-* structured JSON logging
-* correlation IDs
-* operational telemetry semantics
-
-DO NOT:
-
-* redesign observability architecture
-* introduce telemetry duplication
-* remove operational metrics
-* create hidden tracing systems
-
----
-
-# CI/CD RULES
-
-CI posture is now mature and must remain stable.
-
-Preserve:
-
-* GitHub Actions structure
-* branch protection workflows
-* Semgrep execution
-* Gitleaks execution
-* Dependabot integration
-* Ruff/MyPy/Bandit workflows
-* frontend lint/typecheck workflows
-
-DO NOT:
-
-* disable workflows casually
-* weaken security enforcement
-* introduce unstable CI redesigns
-* add excessive workflow complexity
-
----
-
-# TOKEN OPTIMIZATION RULES
-
-ALWAYS optimize:
-
-* token usage
-* implementation scope
-* execution time
-* file churn
-* dependency churn
-* architectural movement
-
-DO NOT:
-
-* refactor scripts repeatedly
-* rewrite stable systems unnecessarily
-* revisit solved architecture repeatedly
-* create broad cleanup tasks
-* introduce speculative future-proofing
-
-Prefer:
-
-* larger cohesive implementation packs
-* fewer repository passes
-* minimal safe diffs
-* additive incremental work
-
-When possible:
-
-* implement related changes together
-* minimize repeated refactors
-* minimize repeated validation passes
-
----
-
-# TESTING POLICY
-
-IMPORTANT:
-Automated tests are NOT the default priority.
-
-The primary validation path is manual validation by the repository owner.
-
-DO NOT automatically run:
-
-* full repository scans
-* heavy CI-equivalent suites
-* expensive integration tests
-* unnecessary frontend rebuild loops
-* long-running validations
-* repeated validation cycles
-
-ONLY run automated validation when:
-
-* strictly necessary
-* directly related to modified code
-* required to verify a critical fix
-* explicitly requested
-* preventing a likely regression
-
-Prefer:
-
-* lightweight targeted validation
-* py_compile
-* focused import checks
-* minimal lint/typecheck checks
-* targeted execution-path validation
-
-Always minimize:
-
-* runtime cost
-* token cost
-* unnecessary validation repetition
-
----
-
-# EXECUTION POLICY
-
-Before implementation:
-
-1. inspect existing modules
-2. inspect existing contracts
-3. inspect integration points
-4. identify reusable infrastructure
-5. identify minimal safe implementation path
-6. identify operational/security risks
-
-Implementation scope must remain:
-
-* narrow
-* incremental
-* additive-first
-* low-risk
-* backwards-compatible whenever possible
-
-DO NOT:
-
-* touch unrelated files
-* perform broad refactors
-* introduce abstraction layers casually
-* redesign stable systems
-* solve speculative future problems
-
----
-
-# DEPENDENCY RULES
-
-Dependency churn is HIGH RISK.
-
-DO NOT:
-
-* upgrade ecosystems casually
-* perform major framework upgrades without operational need
-* introduce dependency instability
-* blindly run upgrade tools with breaking changes
-
-Especially avoid unnecessary churn involving:
-
-* Next.js
-* ESLint ecosystem
-* Tailwind ecosystem
-* observability tooling
-* security tooling
-
-Before dependency changes:
-
-* identify operational need
-* identify compatibility risk
-* identify CI impact
-* identify frontend/runtime risk
-
-Prefer:
-
-* minimal compatible upgrades
-* stable ecosystem versions
-* targeted security fixes
-
----
-
-# README / DOCUMENTATION RULES
-
-Documentation should remain:
-
-* professional
-* concise
-* technically serious
-* operationally realistic
-* recruiter-friendly
-
-Avoid:
-
-* marketing-heavy wording
-* fake-enterprise claims
-* excessive verbosity
-* tutorial-style sprawl
-* architecture essays
-
-README goals:
-
-* fast evaluator understanding
-* operational clarity
-* realistic architecture communication
-* strong public GitHub presentation
-
----
-
-# HALLUCINATION PREVENTION
-
-DO NOT:
-
-* invent files
-* invent APIs
-* invent registries
-* invent integrations
-* assume architecture
-* fabricate workflows
-* assume runtime behavior
-
-If uncertainty exists:
-
-1. inspect repository first
-2. inspect implementation first
-3. inspect existing patterns first
-4. request clarification instead of guessing
-
----
-
-# COMMUNICATION STYLE
-
-Be:
-
-* concise
-* technical
-* incremental
-* practical
-* operationally grounded
-
-Avoid:
-
-* speculative recommendations
-* unnecessary explanations
-* fake-enterprise language
-* excessive architectural theory
-
----
-
-# IMPLEMENTATION TEMPLATE
-
-Task:
-[INSERT TASK]
-
-Requirements:
-
-* additive-first
-* minimal code changes
-* preserve contracts
-* preserve observability
-* preserve tenant isolation
-* preserve auditability
-* preserve deterministic behavior
-
-Constraints:
-
-* avoid broad refactors
-* avoid touching unrelated systems
-* avoid unnecessary dependency changes
-* avoid frontend inflation
-* avoid architecture redesign
-
-Before coding:
-
-* inspect repository first
-* inspect integration points first
-* inspect existing patterns first
-
-After implementation:
-
-1. summarize modified files
-2. summarize integration points
-3. summarize validations executed
-4. summarize architectural safety
-5. summarize operational/security impact
-
----
-
-# SAFE ANALYSIS TEMPLATE
-
-Do NOT implement yet.
-
-First:
-
-* inspect repository
-* inspect architecture
-* inspect integration points
-* inspect workflows
-* inspect contracts
-* inspect security boundaries
-
-Then:
-
-1. identify safest integration point
-2. identify reusable infrastructure
-3. identify minimal implementation strategy
-4. identify operational risks
-5. identify security risks
-6. identify architectural drift risks
-
-Avoid speculative redesigns.
-
----
-
-# DEBUG TEMPLATE
-
-Perform controlled debugging only.
-
-Rules:
-
-* identify root cause first
-* preserve architecture
-* preserve deterministic behavior
-* preserve security posture
-* apply smallest safe fix
-
-Process:
-
-1. identify failing component
-2. trace execution path
-3. identify minimal root cause
-4. apply smallest safe fix
-5. run lightweight validation only if necessary
-
----
-
-# FINAL REVIEW TEMPLATE
-
-Before finalizing, verify:
-
-* architecture preserved
-* modular-monolith preserved
-* no duplicated systems introduced
-* no hidden orchestration introduced
-* no unnecessary abstractions introduced
-* no CI/security regressions introduced
-* no tenant-isolation regressions introduced
-* no operational drift introduced
-* no unnecessary dependency churn introduced
-
-Then provide:
-
-1. concise summary
-2. modified files
-3. integration points
-4. validations executed
-5. operational/security impact
-6. remaining risks
-7. safest next incremental step
-
----
-
-# FINAL RULE
-
-Helix Sentinel is already advanced.
-
-The primary risks are now:
-
-* unnecessary complexity
-* dependency instability
-* architectural drift
-* overengineering
-* operational inconsistency
-* frontend ecosystem churn
-
-Always prioritize:
-
-* simplicity
-* modularity
-* stability
-* maintainability
-* auditability
-* security
-* operational realism
-* low operational risk
-* token efficiency
+After implementation, summarize modified files, integration points, validation,
+security/privacy impact, remaining risks, and the safest next incremental step.

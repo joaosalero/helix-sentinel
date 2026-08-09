@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: helix
       POSTGRES_PASSWORD: helix
     ports:
-      - "5432:5432"
+      - "${HELIX_BIND_HOST:-127.0.0.1}:5432:5432"
     volumes:
       - helix-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -19,7 +19,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "${HELIX_BIND_HOST:-127.0.0.1}:6379:6379"
     volumes:
       - helix-redis:/data
     healthcheck:
@@ -34,7 +34,7 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=7d"
     ports:
-      - "9090:9090"
+      - "${HELIX_BIND_HOST:-127.0.0.1}:9090:9090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -46,8 +46,8 @@ services:
     image: otel/opentelemetry-collector:0.103.0
     command: ["--config=/etc/otelcol/config.yaml"]
     ports:
-      - "4317:4317"
-      - "4318:4318"
+      - "${HELIX_BIND_HOST:-127.0.0.1}:4317:4317"
+      - "${HELIX_BIND_HOST:-127.0.0.1}:4318:4318"
     expose:
       - "8888"
     volumes:
@@ -56,7 +56,7 @@ services:
   grafana:
     image: grafana/grafana:11.0.0
     ports:
-      - "3001:3000"
+      - "${HELIX_BIND_HOST:-127.0.0.1}:3001:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}

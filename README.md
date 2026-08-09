@@ -198,7 +198,7 @@ The dashboard intentionally behaves like an operational workbench rather than a 
 ## Prerequisites
 
 * Python 3.12
-* Node.js 20+
+* Node.js 24 LTS
 * Docker and Docker Compose
 * Git
 

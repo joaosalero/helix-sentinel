@@ -25,6 +25,20 @@ npm run dev
 
 Use `HELIX_API_BASE_URL` to point the dashboard at a non-default API URL. Use `HELIX_API_TOKEN` in `frontend/.env.local` when calling protected API routes from the server-rendered dashboard.
 
+The development server listens on loopback. Anyone with access to this console can use the server account's permissions, including alert workflow actions. Use a dedicated, least-privileged demo account and keep the console local. Per-viewer authentication is outside this preview.
+
+### Selected-alert example
+
+![Investigation Detail for the open Synthetic identity review alert, showing the matched event in the context timeline](../evidence/investigation-detail.webp)
+
+Chromium opened the alert from the queue in the built Next.js dashboard. The
+FastAPI service evaluated an active rule against one synthetic event in a
+disposable PostgreSQL database. The image is a crop of the selected alert in
+its open state. Follow the [demo walkthrough](../demo-data.md) to create a new
+event, rule and alert in a local environment.
+
+[Recorded browser run](https://github.com/joaosalero/helix-sentinel/actions/runs/45232649608/job/137896002996) · [Exact capture procedure](https://github.com/joaosalero/helix-sentinel/blob/f61ed08352d70192f552e61f22d7e60611263629/.github/workflows/capture-investigation.yml)
+
 ## Observability
 
 Start the local observability stack with:

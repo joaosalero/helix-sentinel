@@ -12,32 +12,33 @@ import type { DetectionAlert } from "@/lib/api/types";
 export const dynamic = "force-dynamic";
 
 type HomeProps = {
-  searchParams?: {
-    alert_id?: string;
-    tenant_id?: string;
-  };
+  searchParams: Promise<{
+    alert_id?: string | string[];
+    tenant_id?: string | string[];
+  }>;
 };
 
 export default async function Home({ searchParams }: HomeProps) {
+  const query = await searchParams;
+  const alertId = Array.isArray(query.alert_id) ? query.alert_id[0] : query.alert_id;
+  const tenantId = Array.isArray(query.tenant_id) ? query.tenant_id[0] : query.tenant_id;
   const endTime = new Date();
   const startTime = new Date(endTime.getTime() - 7 * 24 * 60 * 60 * 1000);
   const params = {
     start_time: startTime.toISOString(),
     end_time: endTime.toISOString(),
-    tenant_id: searchParams?.tenant_id,
+    tenant_id: tenantId,
   };
 
   const [report, alerts, coverage, securityActivity, selectedAlert] = await Promise.all([
     getSocReport(params),
-    getOpenAlerts({ tenant_id: searchParams?.tenant_id, limit: 8 }),
+    getOpenAlerts({ tenant_id: tenantId, limit: 8 }),
     getDetectionCoverage({ ...params, limit: 6 }),
     getSecurityActivity({ ...params, limit: 8 }),
-    searchParams?.alert_id
-      ? getAlert(searchParams.alert_id, { tenant_id: searchParams.tenant_id })
-      : Promise.resolve(null),
+    alertId ? getAlert(alertId, { tenant_id: tenantId }) : Promise.resolve(null),
   ]);
   const investigationEvents = selectedAlert?.data
-    ? await getInvestigationEvents(contextQuery(selectedAlert.data, searchParams?.tenant_id))
+    ? await getInvestigationEvents(contextQuery(selectedAlert.data, tenantId))
     : null;
 
   return (
@@ -48,7 +49,7 @@ export default async function Home({ searchParams }: HomeProps) {
       report={report}
       securityActivity={securityActivity}
       selectedAlert={selectedAlert}
-      tenantId={searchParams?.tenant_id}
+      tenantId={tenantId}
     />
   );
 }

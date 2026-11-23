@@ -119,7 +119,7 @@ export function getAlert(
   alertId: string,
   query?: { tenant_id?: string },
 ): Promise<ApiResult<DetectionAlert>> {
-  return requestJson<DetectionAlert>(`/detections/alerts/${alertId}`, query);
+  return requestAlert(alertId, query);
 }
 
 export function updateAlertWorkflow(
@@ -127,11 +127,23 @@ export function updateAlertWorkflow(
   payload: AlertWorkflowUpdate,
   query?: { tenant_id?: string },
 ): Promise<ApiResult<DetectionAlert>> {
-  return requestJson<DetectionAlert>(`/detections/alerts/${alertId}`, query, {
+  return requestAlert(alertId, query, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+function requestAlert(
+  alertId: string,
+  query?: { tenant_id?: string },
+  init?: RequestInit,
+): Promise<ApiResult<DetectionAlert>> {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (alertId.length !== 36 || !uuid.test(alertId)) {
+    return Promise.resolve({ data: null, error: "Invalid alert ID", status: 400 });
+  }
+  return requestJson<DetectionAlert>(`/detections/alerts/${alertId}`, query, init);
 }
 
 export function getInvestigationEvents(query: {

@@ -25,6 +25,8 @@ npm run dev
 
 Use `HELIX_API_BASE_URL` to point the dashboard at a non-default API URL. Use `HELIX_API_TOKEN` in `frontend/.env.local` when calling protected API routes from the server-rendered dashboard.
 
+The development server listens on loopback. Anyone with access to this console can use the server account's permissions, including alert workflow actions. Use a dedicated, least-privileged demo account and keep the console local. Per-viewer authentication is outside this preview.
+
 ## Observability
 
 Start the local observability stack with:

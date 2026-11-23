@@ -1,0 +1,122 @@
+name: Capture synthetic investigation
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: helix_demo
+          POSTGRES_USER: helix
+          POSTGRES_PASSWORD: helix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U helix -d helix_demo" --health-interval 5s
+          --health-timeout 3s --health-retries 8
+    env:
+      HELIX_DATABASE_URL: postgresql+asyncpg://helix:helix@127.0.0.1:5432/helix_demo
+      HELIX_API_BASE_URL: http://127.0.0.1:8000/api/v1
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Build dashboard and start isolated API
+        run: |
+          python -m pip install -q -e ".[dev]" playwright Pillow
+          alembic -c backend/alembic.ini upgrade head
+          (cd frontend && npm ci --no-fund && npm run build)
+      - name: Open a synthetic alert in the deployed local stack
+        env:
+          PYTHONPATH: backend
+        run: |
+          uvicorn helix_sentinel.main:create_app --factory --app-dir backend --host 127.0.0.1 --port 8000 >/tmp/helix-api.log 2>&1 &
+          python - <<'PY'
+          import asyncio, base64, hashlib, io, os, secrets, shutil, subprocess, time
+          from uuid import uuid4
+          import httpx
+          from PIL import Image
+          from playwright.sync_api import sync_playwright, expect
+          from sqlalchemy import select
+          from app.core.security.passwords import hash_password
+          from app.users.models import Role, User, UserRole
+          from helix_sentinel.main import create_app
+
+          def wait_for(url):
+              for _ in range(60):
+                  try:
+                      if httpx.get(url).status_code < 500:
+                          return
+                  except httpx.TransportError:
+                      pass
+                  time.sleep(1)
+              raise RuntimeError("Local service did not become ready")
+
+          password = secrets.token_urlsafe(32)
+          email = "analyst@example.test"
+          async def provision():
+              factory = create_app().state.db_session_factory
+              async with factory() as session, session.begin():
+                  role = await session.scalar(select(Role).where(Role.name == "engineer"))
+                  if role is None:
+                      role = Role(name="engineer")
+                      session.add(role)
+                      await session.flush()
+                  uid = uuid4()
+                  session.add(User(id=uid, email=email, display_name="Demo analyst", password_hash=hash_password(password)))
+                  await session.flush()
+                  session.add(UserRole(user_id=uid, role_id=role.id))
+          asyncio.run(provision())
+          wait_for("http://127.0.0.1:8000/api/v1/health")
+          with httpx.Client(base_url=os.environ["HELIX_API_BASE_URL"] + "/", trust_env=False) as api:
+              def post(route, data):
+                  response = api.post(route, json=data)
+                  response.raise_for_status()
+                  return response.json()
+              token = post("auth/login", {"email":email,"password":password})["access_token"]
+              api.headers["Authorization"] = "Bearer " + token
+              source = "identity-demo"
+              event = post("events/ingest", {"tenant_id":"default","source":{"name":source},"category":"authentication","payload":{"event":{"action":"synthetic login review"}}})
+              title = "Synthetic identity review"
+              rule = post("detections/rules/sigma", {"status":"active","content":f"title: {title}\nlevel: medium\nlogsource:\n  category: authentication\ndetection:\n  selection:\n    source: {source}\n  condition: selection\n"})
+              matches = post(f"detections/rules/{rule['id']}/execute", {"source":source, "limit":5})
+              assert matches["matched_events"] == 1 and matches["matches"][0]["event_id"] == event["normalized_event_id"]
+              env = {**os.environ, "HELIX_API_TOKEN":token}
+              with subprocess.Popen(["node","node_modules/next/dist/bin/next","start","--hostname","127.0.0.1"],cwd="frontend",env=env,stdout=subprocess.DEVNULL) as web:
+                  try:
+                      origin = "http://127.0.0.1:3000/"
+                      wait_for(origin)
+                      with sync_playwright() as pw:
+                          browser = pw.chromium.launch(executable_path=shutil.which("google-chrome"))
+                          page = browser.new_page(viewport={"width":1350,"height":900},device_scale_factor=1.5)
+                          page.goto(origin+"?tenant_id=default")
+                          page.get_by_role("link",name=title,exact=False).click()
+                          panel = page.locator("section").filter(has=page.get_by_role("heading",name="Investigation Detail",exact=True)).last
+                          expect(panel.get_by_text(title,exact=False).first).to_be_visible()
+                          expect(panel.get_by_role("button",name="Acknowledge",exact=True)).to_be_enabled()
+                          assert "alert_id=" in page.url and "tenant_id=default" in page.url
+                          img=Image.open(io.BytesIO(panel.screenshot()))
+                          # Crop the top of the real panel, retaining its header and selected alert.
+                          img=img.crop((0,0,img.width,min(img.height,800)))
+                          buffer=io.BytesIO()
+                          img.save(buffer,format="WEBP",lossless=True,method=6)
+                          data=buffer.getvalue()
+                          print(f"CAPTURE_INFO {img.width}x{img.height} bytes={len(data)} sha256={hashlib.sha256(data).hexdigest()}")
+                          encoded=base64.b64encode(data).decode("ascii")
+                          for pos in range(0,len(encoded),1200):
+                              print("CAPTURE_PART "+encoded[pos:pos+1200])
+                          browser.close()
+                  finally:
+                      web.terminate()
+          PY

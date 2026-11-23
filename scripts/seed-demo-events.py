@@ -69,7 +69,7 @@ def main() -> int:
 
     for event in EVENTS:
         response = _post_event(endpoint, event)
-        event_id = response.get("event_id", "unknown")
+        event_id = response.get("normalized_event_id", "unknown")
         print(f"- {event['source']['name']} {event['category']} accepted as {event_id}")
 
     print("Demo event seed complete.")

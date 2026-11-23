@@ -4,12 +4,12 @@ Use this path when reviewing Helix Sentinel as a public portfolio project or eng
 
 ## Review Path
 
-1. Read the repository overview in [README.md](../README.md), especially the at-a-glance summary and showcase surfaces.
+1. Read the repository overview in [README.md](../README.md), especially the at-a-glance summary and current security boundaries.
 2. Open the architecture overview to confirm the modular-monolith boundaries and explicit non-goals.
 3. Run the API and frontend locally, then open the SOC dashboard.
 4. Review the dashboard from top to bottom: executive posture, triage pressure, detection coverage, audit-backed security activity, priority findings, open alert queue, and selected-alert investigation detail.
 5. Select an alert and follow the investigation panel through triage readiness, evidence pivots, context timeline, acknowledgement, and closure.
-6. Use [demo-data.md](demo-data.md) or `python3 scripts/seed-demo-events.py` when synthetic payload examples are needed for screenshots or walkthroughs.
+6. Follow the [event-to-evidence walkthrough](demo-data.md#event-to-evidence-walkthrough) for exact request bodies. The seeder alone only inserts events; account provisioning, an active rule, explicit rule execution, and authenticated dashboard access are separate prerequisites.
 7. Run the publication validation gate in [release-readiness.md](release-readiness.md) before sharing the repository.
 
 ## What The Demo Should Show
@@ -38,6 +38,15 @@ For public repository images or a portfolio walkthrough, capture:
 - Verify the header shows a safe scope label such as `Aggregate demo` or `Tenant filtered`.
 - Do not include browser address bars containing private `tenant_id` values.
 - Do not include local tokens, private tenant identifiers, real customer data, or raw event payloads in screenshots.
+
+## Claims to Keep Explicit
+
+- This is a development preview, not a deployment-ready SIEM.
+- Ingestion is a trusted-local route without route-level authentication.
+- Protected query scoping does not establish full customer multi-organization tenancy.
+- Refresh does not revoke the previous token, and logout does not immediately revoke sessions.
+- Safe Sigma import and limited synchronous rule evaluation do not provide full Sigma compatibility.
+- Audit-backed workflow state is not certified forensic chain of custody.
 
 ## Scope Boundaries
 

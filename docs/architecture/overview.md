@@ -1,30 +1,66 @@
 # Architecture Overview
 
-Helix Sentinel uses a modular monolith. The backend deploys as one FastAPI application while keeping domain modules explicit: identity, audit, events, detections, analytics, threat intelligence, and validation.
+Helix Sentinel deploys as one FastAPI application with a separate Next.js
+dashboard. PostgreSQL is the system of record; Redis and observability services
+are configured as supporting infrastructure. The modular-monolith design keeps
+deployment and debugging manageable for an independently developed project.
 
-This approach keeps operational complexity low during early product development while preserving boundaries that can support future extraction if a domain develops independent scaling needs.
+## Authoritative runtime and namespace ownership
 
-## Backend Boundaries
+| Location | Current responsibility |
+| --- | --- |
+| `backend/helix_sentinel/main.py` | App factory, repository installation, middleware, and feature-router composition |
+| `backend/helix_sentinel/db/base.py` | Shared SQLAlchemy `Base` metadata owner |
+| `backend/app/api/routes/` | Active HTTP feature endpoints |
+| `backend/app/{auth,audit,events,detections,analytics,threats,ai,enrichment,users}/` | Active feature schemas, services, models, and repositories |
+| `backend/helix_sentinel/{core,db,observability,security,services}/` | Platform/foundation modules and supporting integrations |
+| `backend/helix_sentinel/domains/` | Existing foundation/domain modules; not a second independently wired feature runtime |
+| `frontend/` | Server-rendered workbench, typed API contracts, and server-side bearer-token handling |
 
-- `api`: HTTP transport and versioned route composition.
-- `core`: configuration, middleware, logging, exception handling, and runtime wiring.
-- `db`: SQLAlchemy base types, async session management, and repository primitives.
-- `domains`: domain-owned persistence models and future domain services.
-- `services`: integrations such as Redis and future notification or enrichment clients.
-- `observability`: metrics and tracing integration.
-- `security`: password and token primitives.
-- `analytics`: SOC operational metrics and dashboard-ready aggregations over normalized events.
-- `detections`: Detection Engineering catalog, Sigma metadata parsing, and ATT&CK mappings.
-- `threats`: Deterministic threat correlations, IOC relationships, and explainable risk scoring.
-- `ai`: Deterministic AI-assisted anomaly scoring, classification metadata, and NLP enrichment.
-- `enrichment`: Managed IOC inventory, strict local IOC validation, and deterministic event-to-IOC matching.
+Both Python namespaces belong to the same deployment. New contributors should
+trace imports from the app factory before editing a similarly named domain.
+Namespace consolidation is not required for the present scope.
 
-## Data Architecture
+The app factory installs PostgreSQL-backed repositories for users, audit events,
+ingested events, detection rules, detection alerts, and IOCs. In-memory adapters
+are also available for isolated tests and explicit overrides. The app-state AI
+event adapter is initialized in memory; this should not be described as a
+separate durable AI pipeline.
 
-PostgreSQL is the system of record. JSONB is used only for analytics payloads, enrichment metadata, and explainability context where flexible schema is justified. Core identity, RBAC, audit, and lifecycle entities remain normalized.
+## Event-to-evidence path
 
-The schema is vector-ready: future pgvector columns can be introduced in AI enrichment or analytics metadata tables without changing domain boundaries.
+1. The ingestion route validates and normalizes a JSON event and persists it.
+2. An authenticated user imports a rule and explicitly executes an active rule
+   over a bounded normalized-event query.
+3. Matches produce persisted, de-duplicated rule/event alert records.
+4. The dashboard displays alert detail and contextual event pivots.
+5. An authorized acknowledgement or closure updates workflow fields and records
+   an audit event. Security activity summarizes sanitized audit metadata.
 
-## Frontend Boundary
+See [the synthetic walkthrough](../demo-data.md#event-to-evidence-walkthrough)
+and [detection architecture](detection-engineering.md) for request contracts.
+Audit-backed review is not a claim of a certified forensic evidence system.
 
-The frontend is a Next.js application with TypeScript, TailwindCSS, and shadcn/ui conventions. Its first operational surface is a server-rendered SOC operations dashboard backed by typed API clients for SOC reporting, open alert queues, alert detail retrieval, contextual event timelines, and lightweight investigation workflow updates. API bearer tokens are read from server-only environment variables, and the UI intentionally avoids client-side token storage, global state frameworks, microfrontends, graph visualization systems, and charting ecosystems.
+## Trust boundaries
+
+- Protected feature routes use explicit permission guards and principal-based
+  tenant scoping. The PostgreSQL user adapter currently maps users to
+  `default`; full customer multi-organization tenancy is not implemented.
+- The ingestion route is an explicit trusted-local boundary: it has no
+  route-level authentication and accepts a tenant identifier from the payload.
+- The dashboard keeps its API token server-side. This does not replace API
+  authorization or make arbitrary deployments safe.
+- JWT refresh reissues tokens without persistent single-use/revocation state;
+  logout records intent. Existing tokens remain valid until expiry.
+- Sigma import uses safe YAML parsing. The bounded evaluator implements a small
+  selector subset, not complete Sigma semantics or arbitrary rule execution.
+- Deterministic analytics and local IOC matching require no outbound reputation
+  calls or external model provider. Private integrations are optional and must
+  remain outside public source and examples.
+
+## Deliberate scope
+
+The current workbench does not implement distributed streaming ingestion,
+microservices, SIEM query translation, graph investigations, autonomous response,
+or model training. Future work should be driven by verified requirements rather
+than by adding infrastructure to the portfolio.

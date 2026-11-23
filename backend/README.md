@@ -1,5 +1,9 @@
 # Helix Sentinel Backend
 
+The authoritative app factory is `helix_sentinel.main:create_app` in
+`backend/helix_sentinel/main.py`. Active feature modules live in `backend/app`;
+platform wiring and shared database metadata live in `backend/helix_sentinel`.
+
 ## Security Foundation
 
 The authentication foundation lives under `backend/app` and provides:
@@ -14,7 +18,7 @@ The authentication foundation lives under `backend/app` and provides:
 
 ## Token Strategy
 
-Access tokens are short lived and carry the minimum authorization claims required by API guards. Refresh tokens are longer lived, signed with a separate secret, and include a token identifier so persistent rotation can be added without changing the API contract.
+Access tokens are short lived. Protected routes validate the access token, reload the current user, and resolve permissions from the stored principal. Refresh tokens are longer lived, signed with a separate secret, and include a token identifier so persistent rotation can be added without changing the API contract. Current refresh does not invalidate the old token, and logout records intent without revoking issued tokens.
 
 ## Audit Logging
 
@@ -51,8 +55,11 @@ SOC analytics endpoints are available under `/api/v1/analytics` and require the 
 - `GET /categories`
 - `GET /trends`
 - `GET /sources`
+- `GET /report`: combined operational report.
+- `GET /events`: bounded normalized-event search for investigation context.
+- `GET /security-activity`: sanitized audit-backed activity (also requires `audit:read`).
 
-Filters include `start_time`, `end_time`, `tenant_id`, `source`, `category`, `severity`, `bucket`, `limit`, and `offset`. KPI fields for MTTA, MTTR, TPR, FPR, and alert volume are intentionally nullable until incident and alert lifecycle domains exist.
+Filters include `start_time`, `end_time`, `tenant_id`, `source`, `category`, `severity`, `bucket`, `limit`, and `offset`. The operational report combines event analytics with persisted alert workflow state. MTTA/MTTR and disposition-based rates depend on available acknowledgement, closure, and disposition data and can be null when there is no relevant evidence. They are not independently measured detection-accuracy benchmarks.
 
 ## Detection Engineering
 
@@ -62,7 +69,14 @@ Detection Engineering endpoints live under `/api/v1/detections` and use the exis
 - `GET /rules`: list rules with lifecycle, severity, category, tag, ATT&CK, limit, and offset filters.
 - `GET /rules/{rule_id}`: return normalized rule metadata.
 
-Sigma support is intentionally metadata-focused. The parser uses safe YAML loading, extracts lifecycle metadata, normalizes severity/category, maps ATT&CK tags such as `attack.t1059.001`, and stores detection content for future review. It does not execute rules or translate them to SIEM queries.
+The import parser uses safe YAML loading, extracts lifecycle metadata, normalizes severity/category, and maps ATT&CK tags such as `attack.t1059.001`. Import does not execute a rule. A separate synchronous execution endpoint evaluates active rules against bounded normalized-event history and persists matched rule/event alerts.
+
+- `POST /rules/{rule_id}/execute`: requires `detections:read` and `analytics:read`.
+- `GET /coverage`: operational rule/alert coverage with the same read permissions.
+- `GET /alerts` and `GET /alerts/{alert_id}`: tenant-scoped queues and detail, with the same read permissions.
+- `PATCH /alerts/{alert_id}`: acknowledgement or closure, requiring `detections:read` and `audit:read`.
+
+Execution supports a small Sigma-style selector subset, not the full Sigma condition language or SIEM query translation. See the [detection architecture](../docs/architecture/detection-engineering.md) and [synthetic walkthrough](../docs/demo-data.md#event-to-evidence-walkthrough).
 
 ## Threat Analytics
 
@@ -97,4 +111,6 @@ Validation is syntax-only and local. The service never resolves domains, fetches
 
 ## Local Authentication Wiring
 
-The current implementation uses explicit app-state repositories for local and test wiring. Production persistence should replace these repositories with database-backed adapters that preserve the same protocol boundaries.
+The authoritative runtime installs PostgreSQL-backed user, audit, event, rule, alert, and IOC repositories in application state. In-memory adapters remain for isolated tests and explicit overrides; they are not the default production persistence path.
+
+Protected routes resolve permissions and tenant scope from the authenticated principal. The current PostgreSQL user adapter assigns the `default` tenant, and ingestion is not authenticated at the route. This does not establish complete customer multi-tenant isolation. Account provisioning and persistent refresh-token revocation remain prerequisites for deployment beyond a trusted local preview.

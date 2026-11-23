@@ -98,4 +98,3 @@ async def test_synthetic_investigation(test_settings: Settings) -> None:
             ],
             "audited_alert_updates": len(changes),
         }))
-

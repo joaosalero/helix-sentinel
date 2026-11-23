@@ -12,13 +12,13 @@ Use deterministic, synthetic data when preparing screenshots or evaluator walkth
 
 ## Quick Seed
 
-After the backend is running and migrations have completed, seed the bounded synthetic events with:
+With migrations applied and a local engineer or admin signed in, make the access token available in the process environment as `HELIX_API_TOKEN`. Then run:
 
 ```bash
 python3 scripts/seed-demo-events.py
 ```
 
-The helper posts to `http://localhost:8000/api/v1/events/ingest` by default. Override `HELIX_API_BASE_URL` or `HELIX_DEMO_TENANT_ID` only when exercising a different local API URL or tenant. Keep the target limited to local or trusted demo environments.
+The helper posts to `http://localhost:8000/api/v1/events/ingest` by default. Override `HELIX_API_BASE_URL` or `HELIX_DEMO_TENANT_ID` only when exercising a different local API URL or tenant. The helper accepts loopback destinations and never follows redirects.
 
 This seeds ingestion and investigation context only. Alert lifecycle views still depend on the configured detection rules and authenticated dashboard/API access.
 
@@ -98,8 +98,7 @@ automated end-to-end run. Use a fresh demo database if exact counts matter.
   `detections:read` plus `audit:read`.
 - Set the ignored server-side `HELIX_API_TOKEN` for the dashboard. Do not paste
   tokens into fixtures, screenshots, committed files, or shared terminal output.
-- Keep ingestion local and trusted: its route currently does not authenticate
-  callers. Do not run the seeder against production or private customer data.
+- Ingestion requires `events:ingest`. Seed only a disposable local database with synthetic events.
 
 Use a local HTTP client that can send JSON bodies and an `Authorization: Bearer`
 header for the protected requests below. The route handlers parse several bodies

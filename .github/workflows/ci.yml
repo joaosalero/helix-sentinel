@@ -51,6 +51,10 @@ jobs:
           HELIX_DATABASE_URL: postgresql+asyncpg://helix:helix@localhost:5432/helix_sentinel_test
       - name: Test
         run: pytest
+      - name: Correlate synthetic event, alert and audit records in PostgreSQL
+        run: pytest -q -s backend/tests/events/test_postgres_investigation.py
+        env:
+          HELIX_RUN_DATABASE_DEMO: "1"
       - name: Bandit
         run: bandit -r backend -x backend/tests
 

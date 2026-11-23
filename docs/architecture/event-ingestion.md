@@ -4,8 +4,8 @@ Helix Sentinel ingests one JSON security event per API request. The first implem
 
 ## Flow
 
-1. The API receives `POST /api/v1/events/ingest`.
-2. The request body is size-checked before JSON parsing.
+1. The API authenticates the bearer access token and enforces `events:ingest`.
+2. The API bounds the accumulated request body to 256 KiB before JSON parsing.
 3. JSON is decoded with the standard library and validated by strict Pydantic schemas.
 4. The raw event is stored for traceability and future re-normalization.
 5. The normalizer emits a query-friendly normalized event.
@@ -21,7 +21,7 @@ Categories are intentionally small: `authentication`, `authorization`, `network`
 
 Payloads must be JSON objects. Empty payloads, unknown top-level request fields, excessive nesting, excessive arrays, excessive top-level keys, and oversized strings are rejected. The endpoint does not perform unsafe deserialization or dynamic parsing.
 
-The ingestion endpoint is intended for local development and trusted ingestion paths. It is not a public internet collection endpoint. Deployments that expose ingestion outside a trusted network must add an authentication boundary before the route, such as route-level API authentication or a controlled gateway, while preserving the same validation, audit, and metric behavior.
+The boundary protects the integrity of the raw event, normalized record and derived alerts. A valid access token identifies the actor; `events:ingest` grants the write; the shared tenant guard checks the destination before any event write. Network placement alone does not identify a collector. Rate limits, collector credential lifecycle and operational retention need separate deployment decisions.
 
 ## Database Strategy
 

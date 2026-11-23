@@ -80,6 +80,9 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+      - name: Verify dashboard selection against the built route
+        working-directory: frontend
+        run: node --test tests/dashboard-selection.test.mjs
       - name: Audit frontend dependencies
         working-directory: frontend
         run: npm audit --audit-level=high

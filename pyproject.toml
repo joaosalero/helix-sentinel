@@ -47,7 +47,8 @@ ignore = ["S101"]
 
 [tool.mypy]
 python_version = "3.12"
-plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
+# DeclarativeBase / Mapped use native SQLAlchemy typing (the legacy plugin was removed in 2.1).
+plugins = ["pydantic.mypy"]
 strict = true
 mypy_path = "backend"
 

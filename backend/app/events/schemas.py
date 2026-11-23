@@ -46,7 +46,7 @@ class EventIngestRequest(BaseModel):
     @field_validator("payload")
     @classmethod
     def validate_payload(cls, value: JsonObject) -> JsonObject:
-        """Reject empty, oversized, or secret-shaped payloads."""
+        """Reject empty or structurally oversized payloads."""
         if not value:
             msg = "payload must not be empty"
             raise ValueError(msg)

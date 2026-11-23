@@ -1,6 +1,7 @@
 """Event ingestion application service."""
 
 import logging
+from uuid import UUID
 
 from app.audit.events import AuditAction
 from app.audit.service import AuditService
@@ -29,6 +30,7 @@ class EventIngestionService:
         request: EventIngestRequest,
         *,
         correlation_id: str,
+        actor_id: UUID | None = None,
     ) -> EventIngestResponse:
         """Store raw telemetry and its normalized representation."""
         raw_event = await self.repository.store_raw(request, correlation_id=correlation_id)
@@ -37,6 +39,7 @@ class EventIngestionService:
         await self.audit.record(
             AuditAction.EVENT_INGESTED,
             "success",
+            actor_id=actor_id,
             correlation_id=correlation_id,
             resource=str(normalized.id),
             metadata={

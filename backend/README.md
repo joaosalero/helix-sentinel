@@ -28,7 +28,7 @@ Audit events are structured for future SIEM ingestion. Audit metadata is sanitiz
 
 The event ingestion foundation accepts single JSON security events at `POST /api/v1/events/ingest`. Requests are strictly validated, size-limited, stored as raw telemetry, normalized into query-friendly fields, audited, and counted through Prometheus metrics.
 
-The endpoint is intentionally suitable for local and trusted ingestion paths. Do not expose it directly to the public internet without an authentication boundary in front of the route.
+Use a bearer access token from an account with `events:ingest`. The handler authenticates before reading the event and validates the tenant before creating raw or normalized records.
 
 Example:
 
@@ -113,4 +113,4 @@ Validation is syntax-only and local. The service never resolves domains, fetches
 
 The authoritative runtime installs PostgreSQL-backed user, audit, event, rule, alert, and IOC repositories in application state. In-memory adapters remain for isolated tests and explicit overrides; they are not the default production persistence path.
 
-Protected routes resolve permissions and tenant scope from the authenticated principal. The current PostgreSQL user adapter assigns the `default` tenant, and ingestion is not authenticated at the route. This does not establish complete customer multi-tenant isolation. Account provisioning and persistent refresh-token revocation remain prerequisites for deployment beyond a trusted local preview.
+Protected routes resolve permissions and tenant scope from the authenticated principal. The current PostgreSQL user adapter assigns the `default` tenant. This does not establish complete customer multi-tenant isolation. Account provisioning and persistent refresh-token revocation remain prerequisites for deployment beyond a trusted local preview.

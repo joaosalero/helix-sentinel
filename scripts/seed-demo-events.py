@@ -3,11 +3,10 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import sys
-import urllib.error
-import urllib.request
 from typing import Any
 from urllib.parse import urlparse
 
@@ -65,10 +64,14 @@ EVENTS: list[dict[str, Any]] = [
 
 def main() -> int:
     endpoint = _validated_endpoint(f"{API_BASE_URL}/events/ingest")
+    token = os.environ.get("HELIX_API_TOKEN", "").strip()
+    if not token:
+        print("Set HELIX_API_TOKEN to a local ingestion account's access token.", file=sys.stderr)
+        return 1
     print(f"Seeding {len(EVENTS)} synthetic demo events into {endpoint}")
 
     for event in EVENTS:
-        response = _post_event(endpoint, event)
+        response = _post_event(endpoint, event, token)
         event_id = response.get("normalized_event_id", "unknown")
         print(f"- {event['source']['name']} {event['category']} accepted as {event_id}")
 
@@ -76,38 +79,42 @@ def main() -> int:
     return 0
 
 
-def _post_event(endpoint: str, event: dict[str, Any]) -> dict[str, Any]:
-    body = json.dumps(event).encode("utf-8")
-    request = urllib.request.Request(  # noqa: S310 - endpoint is validated above.
-        endpoint,
-        data=body,
-        headers={"Accept": "application/json", "Content-Type": "application/json"},
-        method="POST",
+def _post_event(endpoint: str, event: dict[str, Any], token: str) -> dict[str, Any]:
+    parsed = urlparse(endpoint)
+    assert parsed.hostname is not None  # validated before sending credentials
+    connection_type = http.client.HTTPSConnection if parsed.scheme == "https" else (
+        http.client.HTTPConnection
     )
-
+    connection = connection_type(parsed.hostname, port=parsed.port, timeout=10)
+    body = json.dumps(event).encode("utf-8")
     try:
-        with urllib.request.urlopen(  # noqa: S310 - endpoint is validated above.  # nosec B310
-            request,
-            timeout=10,
-        ) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        print(f"Event ingestion failed with HTTP {exc.code}: {detail}", file=sys.stderr)
-        raise SystemExit(1) from exc
-    except urllib.error.URLError as exc:
-        print(
-            f"Cannot reach Helix Sentinel API at {endpoint}: {exc.reason}",
-            file=sys.stderr,
+        connection.request(
+            "POST", parsed.path, body,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         )
+        response = connection.getresponse()
+        if response.status != 202:
+            print(f"Event ingestion failed with HTTP {response.status}.", file=sys.stderr)
+            raise SystemExit(1)
+        return json.loads(response.read().decode("utf-8"))
+    except (OSError, http.client.HTTPException) as exc:
+        print("Cannot reach the configured local Helix Sentinel API.", file=sys.stderr)
         raise SystemExit(1) from exc
+    finally:
+        connection.close()
 
 
 def _validated_endpoint(endpoint: str) -> str:
     parsed = urlparse(endpoint)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if (
+        parsed.scheme not in {"http", "https"}
+        or parsed.hostname not in {"127.0.0.1", "::1", "localhost"}
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query or parsed.fragment
+    ):
         print(
-            "HELIX_API_BASE_URL must resolve to an http(s) URL for demo seeding.",
+            "HELIX_API_BASE_URL must be a loopback HTTP(S) URL with no credentials or query.",
             file=sys.stderr,
         )
         raise SystemExit(1)

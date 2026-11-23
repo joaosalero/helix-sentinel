@@ -451,13 +451,13 @@ async def _investigation_status_counts(
     filters: AuditActivityFilter,
 ) -> Counter[str]:
     statement = (
-        select(AuditEvent.metadata_["to_status"].as_string(), func.count())
+        select(AuditEvent.metadata_["to_status"].as_string().label("workflow_status"), func.count())
         .where(
             *_filter_clauses(filters),
             AuditEvent.action == "detections.alert_updated",
             AuditEvent.outcome == "success",
         )
-        .group_by(AuditEvent.metadata_["to_status"].as_string())
+        .group_by("workflow_status")
     )
     rows = (await session.execute(statement)).all()
     return Counter({str(status): int(count) for status, count in rows if status is not None})

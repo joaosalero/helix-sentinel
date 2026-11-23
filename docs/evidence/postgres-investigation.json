@@ -1,0 +1,19 @@
+{
+  "commit": "92efbd94fa55576728b6051044cee8b91a19971c",
+  "run_url": "https://github.com/joaosalero/helix-sentinel/actions/runs/45233032382/job/137897411781",
+  "runtime": "Python 3.12, PostgreSQL 16, in-process ASGI HTTP",
+  "observed": {
+    "source": "identity-46039a856c494b468bf39d186b796721",
+    "event_id": "02091b40-0903-40c0-920a-9a93e389c954",
+    "rule_id": "46bff864-56f0-4479-8a55-b435e7e4f72d",
+    "alert_id": "fb962ce4-e201-472c-abbd-9aa6a40599bf",
+    "evaluated": 1,
+    "matched": 1,
+    "observed_states": [
+      "open",
+      "acknowledged",
+      "closed"
+    ],
+    "audited_alert_updates": 2
+  }
+}

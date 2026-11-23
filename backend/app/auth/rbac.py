@@ -17,6 +17,7 @@ class Permission(StrEnum):
 
     USERS_READ = "users:read"
     USERS_WRITE = "users:write"
+    EVENTS_INGEST = "events:ingest"
     DETECTIONS_READ = "detections:read"
     DETECTIONS_WRITE = "detections:write"
     ANALYTICS_READ = "analytics:read"
@@ -28,6 +29,7 @@ ROLE_PERMISSIONS: dict[SystemRole, frozenset[Permission]] = {
     SystemRole.ENGINEER: frozenset(
         {
             Permission.USERS_READ,
+            Permission.EVENTS_INGEST,
             Permission.DETECTIONS_READ,
             Permission.DETECTIONS_WRITE,
             Permission.ANALYTICS_READ,

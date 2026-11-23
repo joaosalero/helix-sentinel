@@ -30,6 +30,7 @@ class DemoSeederOutputTests(unittest.TestCase):
         ]
         output = io.StringIO()
         with (
+            patch.dict("os.environ", HELIX_API_TOKEN="synthetic-test-token"),
             patch.object(SEEDER, "API_BASE_URL", "http://localhost:8000/api/v1"),
             patch.object(SEEDER, "_post_event", side_effect=responses) as post_event,
             redirect_stdout(output),
@@ -47,6 +48,7 @@ class DemoSeederOutputTests(unittest.TestCase):
     def test_missing_normalized_id_uses_explicit_unknown_fallback(self) -> None:
         output = io.StringIO()
         with (
+            patch.dict("os.environ", HELIX_API_TOKEN="synthetic-test-token"),
             patch.object(SEEDER, "API_BASE_URL", "http://localhost:8000/api/v1"),
             patch.object(SEEDER, "_post_event", return_value={"raw_event_id": "raw-only"}),
             redirect_stdout(output),
@@ -55,6 +57,32 @@ class DemoSeederOutputTests(unittest.TestCase):
 
         self.assertEqual(output.getvalue().count("accepted as unknown"), len(SEEDER.EVENTS))
         self.assertNotIn("accepted as raw-only", output.getvalue())
+
+
+    def test_missing_token_stops_before_post(self) -> None:
+        with (
+            patch.dict("os.environ", HELIX_API_TOKEN=""),
+            patch.object(SEEDER, "_post_event") as post,
+        ):
+            self.assertEqual(SEEDER.main(), 1)
+            post.assert_not_called()
+
+    def test_refuses_nonlocal_destinations(self) -> None:
+        with self.assertRaises(SystemExit):
+            SEEDER._validated_endpoint("https://example.test/api/v1/events/ingest")
+
+    def test_authenticated_post_stops_on_redirect_without_forwarding_token(self) -> None:
+        endpoint = SEEDER._validated_endpoint("http://127.0.0.1:8000/api/v1/events/ingest")
+        with patch.object(SEEDER.http.client, "HTTPConnection") as connect:
+            connection = connect.return_value
+            connection.getresponse.return_value.status = 307
+            with self.assertRaises(SystemExit):
+                SEEDER._post_event(endpoint, SEEDER.EVENTS[0], "synthetic-test-token")
+            connect.assert_called_once_with("127.0.0.1", port=8000, timeout=10)
+            connection.request.assert_called_once()
+            headers = connection.request.call_args.kwargs["headers"]
+            self.assertEqual(headers["Authorization"], "Bearer synthetic-test-token")
+            connection.close.assert_called_once()
 
 
 if __name__ == "__main__":

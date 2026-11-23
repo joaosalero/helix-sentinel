@@ -2,11 +2,42 @@
 
 Use this path when reviewing Helix Sentinel as a public portfolio project or engineering sample.
 
+## Case study: from a synthetic event to a reviewable alert
+
+**Problem.** An analyst needs to tell which observation caused an alert and what happened during review. Counting rule matches alone loses this relationship.
+
+**Constraints.** The preview has one modular backend, synchronous bounded evaluation and a limited Sigma subset. The PostgreSQL identity adapter currently assigns accounts to the default tenant. The dataset contains one synthetic identity event.
+
+**Architecture.** The authenticated ingestion route writes a raw record, then the normalizer writes a queryable event with its own ID. A rule execution links its match to that event. The alert repository enforces a unique rule/event pair. Acknowledgement and closure are separate, auditable actions.
+
+```mermaid
+flowchart TD
+    A["Authenticated synthetic event"] --> B["Raw and normalized records"]
+    B --> C["Bounded rule evaluation"]
+    C --> D["Alert with rule and event IDs"]
+    D --> E["Investigation, acknowledgement and closure"]
+    E --> F["Tenant-scoped audit activity"]
+```
+
+**Engineering decision.** The event ID connects the ingest response, evaluator and alert. Explicit execution keeps the analysis bounded. The database uniqueness constraint protects repeated rule/event pairs. Permission and tenant checks occur before event persistence; the accepted record carries an actor ID and a correlation ID.
+
+The activity aggregate groups by a named SQL result column for the JSON workflow state. Building the JSON path twice introduced two independent parameters that PostgreSQL could not equate during grouping. The database replay reads the actual aggregate and checks acknowledgement and closure counts.
+
+**Replay.** The [PostgreSQL investigation test](../backend/tests/events/test_postgres_investigation.py) signs in a generated account, posts an event, imports one active rule, reads its alert, acknowledges it, closes it and retrieves the resulting audit activity. It checks that the same event ID appears at each link and that both workflow updates are visible. The **Correlate synthetic event, alert and audit records in PostgreSQL** CI step prints a compact JSON record with only synthetic identifiers, counts and observed states. It uses the production app factory and PostgreSQL adapters through an in-process HTTP transport.
+
+To repeat the run, use a disposable PostgreSQL 16 database with the test connection settings in [conftest.py](../backend/tests/conftest.py), apply the [CI migration command](../.github/workflows/ci.yml), then run `HELIX_RUN_DATABASE_DEMO=1 pytest -q -s backend/tests/events/test_postgres_investigation.py`. The replay creates synthetic rows. Each run uses a unique event source and account.
+
+**Recorded result.** One synthetic event was evaluated and matched. Its alert was read, acknowledged and closed; the tenant-scoped audit API returned both updates for the same alert ID. Compare the [sanitized record](evidence/postgres-investigation.json) with the [PostgreSQL job](https://github.com/joaosalero/helix-sentinel/actions/runs/45233032382/job/137897411781).
+
+The [dashboard capture](evidence/investigation-detail.webp) shows a separate synthetic investigation. Its [capture job](https://github.com/joaosalero/helix-sentinel/actions/runs/45232649608/job/137896002996) exercised the built frontend; the database replay above verified the audit query and lifecycle separately.
+
+**Limits and next step.** This replay exercises the API and database. Dashboard rendering, detection accuracy and load behavior require separate evidence. Raw event, normalized event and audit persistence have separate transaction boundaries; a mid-request failure can leave an incomplete sequence. Reconciliation or an atomic ingest transaction would need an explicit recovery contract. Production tenant membership and persistent session revocation also require design and migration work.
+
 ## Review Path
 
 1. Read the repository overview in [README.md](../README.md), especially the at-a-glance summary and current security boundaries.
 2. Open the architecture overview to confirm the modular-monolith boundaries and explicit non-goals.
-3. Run the API and frontend locally, then open the SOC dashboard.
+3. Bind the frontend to loopback for single-user review and open the SOC dashboard. The dashboard uses the configured server-side account for reads and workflow updates.
 4. Review the dashboard from top to bottom: executive posture, triage pressure, detection coverage, audit-backed security activity, priority findings, open alert queue, and selected-alert investigation detail.
 5. Select an alert and follow the investigation panel through triage readiness, evidence pivots, context timeline, acknowledgement, and closure.
 6. Follow the [event-to-evidence walkthrough](demo-data.md#event-to-evidence-walkthrough) for exact request bodies. The seeder alone only inserts events; account provisioning, an active rule, explicit rule execution, and authenticated dashboard access are separate prerequisites.
@@ -42,7 +73,7 @@ For public repository images or a portfolio walkthrough, capture:
 ## Claims to Keep Explicit
 
 - This is a development preview, not a deployment-ready SIEM.
-- Ingestion is a trusted-local route without route-level authentication.
+- Ingestion requires a bearer token, the ingestion permission and an authorized tenant.
 - Protected query scoping does not establish full customer multi-organization tenancy.
 - Refresh does not revoke the previous token, and logout does not immediately revoke sessions.
 - Safe Sigma import and limited synchronous rule evaluation do not provide full Sigma compatibility.

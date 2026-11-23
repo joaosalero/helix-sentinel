@@ -46,8 +46,7 @@ Audit-backed review is not a claim of a certified forensic evidence system.
 - Protected feature routes use explicit permission guards and principal-based
   tenant scoping. The PostgreSQL user adapter currently maps users to
   `default`; full customer multi-organization tenancy is not implemented.
-- The ingestion route is an explicit trusted-local boundary: it has no
-  route-level authentication and accepts a tenant identifier from the payload.
+- Ingestion requires the `events:ingest` permission and resolves the submitted tenant against the authenticated principal before any event writes.
 - The dashboard keeps its API token server-side. This does not replace API
   authorization or make arbitrary deployments safe.
 - JWT refresh reissues tokens without persistent single-use/revocation state;

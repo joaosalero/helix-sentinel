@@ -31,9 +31,11 @@ explicit different tenant for non-superusers. The PostgreSQL user adapter
 currently sets `tenant_id="default"`, so this does not provide complete customer
 multi-organization tenancy.
 
-`POST /api/v1/events/ingest` has no route-level authentication and accepts the
-payload tenant identifier. Run it only inside a trusted ingestion boundary; the
-permission guards on analytics and detection routes do not protect ingestion.
+`POST /api/v1/events/ingest` requires a bearer access token and `events:ingest`.
+The engineer and admin roles include this permission. A custom role can grant only
+that permission to a collector. If the body omits `tenant_id`, the handler uses
+the principal’s tenant. Only a superuser can explicitly select another tenant.
+A successful ingestion audit record includes the actor ID and resulting tenant.
 
 Account provisioning is not automatic in the quick start. Database migrations
 create schema, not a working account or a dashboard bearer token.

@@ -36,7 +36,7 @@ pipeline.
 
 The [synthetic walkthrough](docs/demo-data.md#event-to-evidence-walkthrough)
 provides the request bodies and expected observations.
-[Showcase guidance](docs/showcase.md) covers safe screenshots and review targets.
+[Investigation case study](docs/showcase.md) links the replay, its assertions and its operating limits.
 
 ## Architecture and engineering decisions
 
@@ -109,10 +109,9 @@ non-local deployment and keep local configuration out of version control.
 
 ## Security boundaries and current limitations
 
-- **Trusted local ingestion:** `POST /api/v1/events/ingest` currently has no
-  route-level authentication and accepts the submitted tenant identifier. Keep
-  it behind a trusted ingestion boundary; do not expose it directly to the
-  internet.
+- **Event ingestion:** `POST /api/v1/events/ingest` requires an active bearer
+  principal with `events:ingest`. An omitted tenant inherits the account scope.
+  The shared tenant guard checks explicit tenant values before persistence.
 - **Session lifecycle:** refresh reissues JWTs but does not persist single-use
   token consumption or revocation. Logout records an audit event; existing
   tokens remain valid until expiry.

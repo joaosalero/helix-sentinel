@@ -46,15 +46,14 @@ class TokenService:
         expires_at = datetime.now(UTC) + timedelta(
             minutes=self.settings.access_token_expire_minutes
         )
+        claims: dict[str, Any] = {"roles": sorted(roles), "permissions": sorted(permissions)}
+        if token_id is not None:
+            claims["jti"] = token_id
         return self._encode(
             subject=subject,
             token_type=TokenType.ACCESS,
             expires_at=expires_at,
-            claims={
-                "roles": sorted(roles),
-                "permissions": sorted(permissions),
-                "jti": token_id,
-            },
+            claims=claims,
         )
 
     def create_refresh_token(self, subject: str, token_id: str) -> str:

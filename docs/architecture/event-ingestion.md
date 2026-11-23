@@ -25,6 +25,8 @@ The boundary protects the integrity of the raw event, normalized record and deri
 
 ## Database Strategy
 
+Input validation bounds structure and sizes. The raw record retains the submitted payload; collectors must remove confidential fields before submitting telemetry. Audit metadata has a separate sanitization policy.
+
 PostgreSQL stores raw and normalized events in separate tables. Raw events use JSONB for source payload retention. Normalized events use indexed scalar columns for common filters and JSONB fields for actor, asset, enrichment, network, and IOC metadata. Indexes prioritize tenant/time, category/time, severity/time, source/time, and targeted JSONB lookups.
 
 The authoritative runtime uses a PostgreSQL-backed event repository for raw and normalized ingestion persistence. In-memory event repositories remain available for isolated tests and explicit local overrides.

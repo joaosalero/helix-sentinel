@@ -31,7 +31,7 @@ To repeat the run, use a disposable PostgreSQL 16 database with the test connect
 
 1. Read the repository overview in [README.md](../README.md), especially the at-a-glance summary and current security boundaries.
 2. Open the architecture overview to confirm the modular-monolith boundaries and explicit non-goals.
-3. Run the API and frontend locally, then open the SOC dashboard.
+3. Bind the frontend to loopback for single-user review and open the SOC dashboard. The dashboard uses the configured server-side account for reads and workflow updates.
 4. Review the dashboard from top to bottom: executive posture, triage pressure, detection coverage, audit-backed security activity, priority findings, open alert queue, and selected-alert investigation detail.
 5. Select an alert and follow the investigation panel through triage readiness, evidence pivots, context timeline, acknowledgement, and closure.
 6. Follow the [event-to-evidence walkthrough](demo-data.md#event-to-evidence-walkthrough) for exact request bodies. The seeder alone only inserts events; account provisioning, an active rule, explicit rule execution, and authenticated dashboard access are separate prerequisites.

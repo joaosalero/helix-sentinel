@@ -27,6 +27,10 @@ The activity aggregate groups by a named SQL result column for the JSON workflow
 
 To repeat the run, use a disposable PostgreSQL 16 database with the test connection settings in [conftest.py](../backend/tests/conftest.py), apply the [CI migration command](../.github/workflows/ci.yml), then run `HELIX_RUN_DATABASE_DEMO=1 pytest -q -s backend/tests/events/test_postgres_investigation.py`. The replay creates synthetic rows. Each run uses a unique event source and account.
 
+**Recorded result.** One synthetic event was evaluated and matched. Its alert was read, acknowledged and closed; the tenant-scoped audit API returned both updates for the same alert ID. Compare the [sanitized record](evidence/postgres-investigation.json) with the [PostgreSQL job](https://github.com/joaosalero/helix-sentinel/actions/runs/45233032382/job/137897411781).
+
+The [dashboard capture](evidence/investigation-detail.webp) shows a separate synthetic investigation. Its [capture job](https://github.com/joaosalero/helix-sentinel/actions/runs/45232649608/job/137896002996) exercised the built frontend; the database replay above verified the audit query and lifecycle separately.
+
 **Limits and next step.** This replay exercises the API and database. Dashboard rendering, detection accuracy and load behavior require separate evidence. Raw event, normalized event and audit persistence have separate transaction boundaries; a mid-request failure can leave an incomplete sequence. Reconciliation or an atomic ingest transaction would need an explicit recovery contract. Production tenant membership and persistent session revocation also require design and migration work.
 
 ## Review Path

@@ -16,6 +16,28 @@ Routes should authorize with explicit role or permission checks. Superuser acces
 
 The authoritative runtime uses PostgreSQL-backed repositories for authentication user lookups and audit event persistence. In-memory repositories remain available for isolated tests and explicit local overrides.
 
+## Session Lifecycle Limits
+
+A refresh request validates the JWT and current user state, then issues a new pair.
+It does not persist consumption or revocation of the previous refresh token.
+Logout records an audit event; previously issued access and refresh tokens remain
+valid until their expiry. The current implementation must not be presented as
+replay-resistant refresh rotation or immediate session revocation.
+
+## Tenant and Ingestion Limits
+
+Protected query routes resolve tenant scope from the principal and reject an
+explicit different tenant for non-superusers. The PostgreSQL user adapter
+currently sets `tenant_id="default"`, so this does not provide complete customer
+multi-organization tenancy.
+
+`POST /api/v1/events/ingest` has no route-level authentication and accepts the
+payload tenant identifier. Run it only inside a trusted ingestion boundary; the
+permission guards on analytics and detection routes do not protect ingestion.
+
+Account provisioning is not automatic in the quick start. Database migrations
+create schema, not a working account or a dashboard bearer token.
+
 ## Account Enumeration
 
 Login failures return a generic authentication error for missing users, invalid passwords, and inactive accounts. Missing-user login attempts still perform dummy password verification to reduce timing differences.

@@ -83,6 +83,8 @@ async def test_synthetic_investigation(test_settings: Settings) -> None:
         assert reread.status_code == 200 and reread.json()["status"] == "closed"
         audit = await client.get("analytics/security-activity", params={"limit": 50})
         assert audit.status_code == 200
+        assert audit.json()["investigations"]["acknowledgements"] >= 1
+        assert audit.json()["investigations"]["closures"] >= 1
         changes = [
             row for row in audit.json()["recent_activity"]
             if row["resource"] == alert["id"] and row["action"] == "detections.alert_updated"

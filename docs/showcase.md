@@ -21,6 +21,8 @@ flowchart TD
 
 **Engineering decision.** The event ID connects the ingest response, evaluator and alert. Explicit execution keeps the analysis bounded. The database uniqueness constraint protects repeated rule/event pairs. Permission and tenant checks occur before event persistence; the accepted record carries an actor ID and a correlation ID.
 
+The activity aggregate groups by a named SQL result column for the JSON workflow state. Building the JSON path twice introduced two independent parameters that PostgreSQL could not equate during grouping. The database replay reads the actual aggregate and checks acknowledgement and closure counts.
+
 **Replay.** The [PostgreSQL investigation test](../backend/tests/events/test_postgres_investigation.py) signs in a generated account, posts an event, imports one active rule, reads its alert, acknowledges it, closes it and retrieves the resulting audit activity. It checks that the same event ID appears at each link and that both workflow updates are visible. The **Correlate synthetic event, alert and audit records in PostgreSQL** CI step prints a compact JSON record with only synthetic identifiers, counts and observed states. It uses the production app factory and PostgreSQL adapters through an in-process HTTP transport.
 
 To repeat the run, use a disposable PostgreSQL 16 database with the test connection settings in [conftest.py](../backend/tests/conftest.py), apply the [CI migration command](../.github/workflows/ci.yml), then run `HELIX_RUN_DATABASE_DEMO=1 pytest -q -s backend/tests/events/test_postgres_investigation.py`. The replay creates synthetic rows. Each run uses a unique event source and account.

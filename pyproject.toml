@@ -19,9 +19,11 @@ dependencies = [
   "prometheus-client>=0.20",
   "pydantic-settings>=2.3",
   "pyjwt>=2.12.0",
+  "PyYAML>=6.0.4",
   "python-json-logger>=2.0",
   "redis>=5.0",
-  "sqlalchemy[asyncio]>=2.0",
+  # Repository Select[tuple[...]] annotations target the SQLAlchemy 2.0 typing contract.
+  "sqlalchemy[asyncio]>=2.0.58,<2.1",
   "uvicorn[standard]>=0.30"
 ]
 
@@ -47,7 +49,7 @@ ignore = ["S101"]
 
 [tool.mypy]
 python_version = "3.12"
-# DeclarativeBase / Mapped use native SQLAlchemy typing (the legacy plugin was removed in 2.1).
+# DeclarativeBase / Mapped use native typing without the deprecated legacy mypy plugin.
 plugins = ["pydantic.mypy"]
 strict = true
 mypy_path = "backend"
